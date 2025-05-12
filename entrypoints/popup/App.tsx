@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import './App.css';
 
 export default function App() {
-  const [maxScrolls, setMaxScrolls] = useState<number>(20);
+  const [maxScrolls, setMaxScrolls] = useState<number>(30);
+  const [maxScrollsInput, setMaxScrollsInput] = useState<string>(() => maxScrolls.toString());
   const [currentScrolls, setCurrentScrolls] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveStatus, setSaveStatus] = useState<string>('');
-  const [distractingSites, setDistractingSites] = useState<string[]>(['twitter.com', 'x.com']);
+  const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com']);
   const [newSite, setNewSite] = useState<string>('');
   const [resetInterval, setResetInterval] = useState<number>(0);
 
@@ -14,9 +15,10 @@ export default function App() {
     // Load settings from storage
     browser.runtime.sendMessage({ type: 'GET_SETTINGS' })
       .then((settings) => {
-        setMaxScrolls(settings.maxScrolls || 20);
+        const loadedMaxScrolls = settings.maxScrolls || 30;
+        setMaxScrolls(loadedMaxScrolls);
         setCurrentScrolls(settings.scrollCount || 0);
-        setDistractingSites(settings.distractingSites || ['twitter.com', 'x.com']);
+        setDistractingSites(settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com']);
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
       })
@@ -26,11 +28,41 @@ export default function App() {
       });
   }, []);
 
+  // Effect to sync maxScrollsInput when maxScrolls changes
+  useEffect(() => {
+    // This effect ensures that if maxScrolls is changed programmatically
+    // (e.g., on load, or after blur/save validation sets it),
+    // the input field (maxScrollsInput) reflects this validated numeric state.
+    if (maxScrolls.toString() !== maxScrollsInput) { // Only update if actually different
+        setMaxScrollsInput(maxScrolls.toString());
+    }
+  }, [maxScrolls]); // CRITICAL: Only depend on maxScrolls
+
+  const handleMaxScrollsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMaxScrollsInput(e.target.value);
+  };
+
+  const handleMaxScrollsBlur = () => {
+    let num = parseInt(maxScrollsInput);
+    if (isNaN(num) || num < 1) {
+      num = 30;
+    }
+    setMaxScrolls(num);
+  };
+
   const handleSave = () => {
     setSaveStatus('Saving...');
+    let currentNumVal = parseInt(maxScrollsInput);
+    if (isNaN(currentNumVal) || currentNumVal < 1) {
+        currentNumVal = 30;
+    }
+    setMaxScrolls(currentNumVal);
+
+    const scrollsToSave = currentNumVal;
+
     browser.runtime.sendMessage({
       type: 'SAVE_SETTINGS',
-      maxScrolls,
+      maxScrolls: scrollsToSave,
       distractingSites,
       resetInterval
     })
@@ -111,11 +143,12 @@ export default function App() {
         <label htmlFor="max-scrolls">Scroll limit per session:</label>
         <input
           id="max-scrolls"
-          type="number"
-          min="1"
-          max="1000"
-          value={maxScrolls}
-          onChange={(e) => setMaxScrolls(Math.max(1, parseInt(e.target.value) || 1))}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={maxScrollsInput}
+          onChange={handleMaxScrollsInputChange}
+          onBlur={handleMaxScrollsBlur}
         />
       </div>
 

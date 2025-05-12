@@ -5,9 +5,9 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
       browser.storage.sync.set({
-        maxScrolls: 20,  // Default max scrolls
+        maxScrolls: 30,  // Default max scrolls to 30
         scrollCount: 0,  // Initial scroll count
-        distractingSites: ['twitter.com', 'x.com'], // Default sites
+        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Re-confirm Default sites
         resetInterval: 0, // 0 means no auto reset
         lastResetTime: Date.now() // Track when the counter was last reset
       });
@@ -62,7 +62,7 @@ export default defineBackground(() => {
   // Helper function to update all content scripts
   function updateAllContentScripts(message) {
     browser.storage.sync.get(['distractingSites']).then(result => {
-      const sites = result.distractingSites || ['twitter.com', 'x.com'];
+      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Re-confirm fallback
       
       // Create URL patterns for each site
       const urlPatterns = sites.flatMap(site => {

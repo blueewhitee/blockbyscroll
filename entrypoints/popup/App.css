@@ -1,6 +1,8 @@
+* { box-sizing: border-box; } /* Global box-sizing */
+
 :root {
   --primary-color: #6c8a6e;
-  --primary-hover: #5a755c;
+  --primary-hover: #4B6A4D;
   --danger-color: #a45d5d;
   --danger-hover: #8e4f4f;
   --background: #F7F9FA;
@@ -17,6 +19,10 @@
   --progress-color: #7e8376;
 }
 
+html {
+  overflow: hidden; /* Prevent scroll on html element */
+}
+
 body {
   margin: 0;
   font-family: 'Open Sans', sans-serif;
@@ -27,12 +33,13 @@ body {
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+  overflow: hidden; /* Keep this here */
 }
 
 .container {
-  width: 350px;
-  padding: 20px;
-  min-height: 350px;
+  width: 340px;
+  padding: 20px; /* Restored from 15px */
+  min-height: 320px; /* Increased from 300px */
   display: flex;
   flex-direction: column;
   background-color: rgba(255, 255, 255, 0.3);
@@ -48,7 +55,7 @@ header {
 
 h1 {
   margin: 0;
-  color: var(--primary-color);
+  color: #4A7C4A;
   font-size: 28px;
   font-family: Georgia, serif;
   font-weight: 700;
@@ -194,6 +201,7 @@ button {
   margin-top: 6px;
   max-height: 150px;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 8px;

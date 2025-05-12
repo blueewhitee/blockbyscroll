@@ -6,9 +6,9 @@ export default defineContentScript({
     
     // Initialize variables
     let scrollCount = 0;
-    let maxScrolls = 20; // Default value
+    let maxScrolls = 30; // Default value to 30
     let isBlocked = false;
-    let distractingSites = ['twitter.com', 'x.com']; // Default sites
+    let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Re-confirm Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     
@@ -76,9 +76,9 @@ export default defineContentScript({
     // Get settings from storage
     async function getSettings() {
       const result = await browser.storage.sync.get({
-        maxScrolls: 20,
+        maxScrolls: 30, // Fallback to 30
         scrollCount: 0,
-        distractingSites: ['twitter.com', 'x.com'],
+        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Re-confirm fallback
         resetInterval: 0,
         lastResetTime: Date.now()
       });
