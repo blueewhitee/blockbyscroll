@@ -139,7 +139,7 @@ export default function App() {
         <label>Blocked Sites:</label>
         <div className="sites-container">
           {distractingSites.map((site) => (
-            <div key={site} className="site-item">
+            <div key={site} className="site-item" title={site}>
               <img src={getFaviconUrl(site)} alt={`${site} favicon`} className="site-favicon" />
               <span className="site-name">{site}</span>
               <button
@@ -166,7 +166,9 @@ export default function App() {
             onChange={(e) => setNewSite(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddSite()}
           />
-          <button onClick={handleAddSite}>Add Site</button>
+          <button onClick={handleAddSite} className="add-site-plus-button" aria-label="Add site">
+            +
+          </button>
         </div>
         <div className="button-group" style={{ marginTop: '10px' }}>
           <button className="save-button" onClick={handleSave}>
