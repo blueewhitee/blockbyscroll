@@ -109,6 +109,8 @@ h1 {
   border: 1px solid var(--border-color);
   font-size: 16px;
   box-sizing: border-box;
+  background-color: var(--card-bg);
+  color: var(--text-color);
 }
 
 .status-message {
@@ -232,6 +234,8 @@ button {
   border: 1px solid #e1e4e8;
   border-radius: 4px 0 0 4px;
   font-size: 14px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
 }
 
 .add-site button {
@@ -260,6 +264,8 @@ button {
   border: 1px solid #e1e4e8;
   border-radius: 4px;
   font-size: 14px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
 }
 
 .unit-text {

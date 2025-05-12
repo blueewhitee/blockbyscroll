@@ -137,23 +137,13 @@ export default function App() {
       
       <div className="settings-group">
         <label>Blocked Sites:</label>
-        <div className="add-site">
-          <input
-            type="text"
-            placeholder="e.g. news.com, social.network"
-            value={newSite}
-            onChange={(e) => setNewSite(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddSite()}
-          />
-          <button onClick={handleAddSite}>Add Site</button>
-        </div>
         <div className="sites-container">
           {distractingSites.map((site) => (
             <div key={site} className="site-item">
               <img src={getFaviconUrl(site)} alt={`${site} favicon`} className="site-favicon" />
               <span className="site-name">{site}</span>
-              <button 
-                className="remove-site" 
+              <button
+                className="remove-site"
                 onClick={() => handleRemoveSite(site)}
                 aria-label={`Remove ${site}`}
                 title={`Remove ${site}`}
@@ -168,18 +158,27 @@ export default function App() {
             </p>
           )}
         </div>
+        <div className="add-site">
+          <input
+            type="text"
+            placeholder="e.g. news.com, social.network"
+            value={newSite}
+            onChange={(e) => setNewSite(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddSite()}
+          />
+          <button onClick={handleAddSite}>Add Site</button>
+        </div>
+        <div className="button-group" style={{ marginTop: '10px' }}>
+          <button className="save-button" onClick={handleSave}>
+            Save Settings
+          </button>
+          <button className="reset-button" onClick={handleReset}>
+            Reset Counter
+          </button>
+        </div>
       </div>
       
       <div className="status-message">{saveStatus}</div>
-      
-      <div className="button-group">
-        <button className="save-button" onClick={handleSave}>
-          Save Settings
-        </button>
-        <button className="reset-button" onClick={handleReset}>
-          Reset Counter
-        </button>
-      </div>
     </div>
   );
 }
