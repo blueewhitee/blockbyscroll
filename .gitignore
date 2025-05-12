@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+
+# Build/output folders
+.output/
+.wxt/
+stats.html
+stats-*.json
+
+# Web extension specific (if applicable, like web-ext temporary files)
+web-ext.config.ts 
+# Add other web-ext specific files if any, e.g., web-ext-artifacts/
+
+# Editor directories and files
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating System files
+# Thumbs.db
+# ehthumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
