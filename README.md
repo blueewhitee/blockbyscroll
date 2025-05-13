@@ -1,8 +1,8 @@
 # ScrollStop
 
-**Control your X/Twitter scrolling and prevent doomscrolling**
+**Control and prevent your doomscrolling**
 
-ScrollStop is a browser extension designed to help you maintain healthy scrolling habits on X (formerly Twitter) by limiting how much you can scroll in a single session.
+ScrollStop is a browser extension designed to help you maintain healthy scrolling habits  by limiting how much you can scroll in a single session.
 
 ## Features
 
@@ -48,7 +48,7 @@ ScrollStop helps you take control of your scrolling habits by giving you a visua
 3. Start the development server: `npm run dev`
 4. A browser will open with the extension loaded
 
-## Usage
+## Example Usage
 
 1. After installing the extension, click on the ScrollStop icon in your browser's toolbar
 2. Set your desired maximum scroll count
