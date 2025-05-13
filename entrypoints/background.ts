@@ -4,10 +4,19 @@ export default defineBackground(() => {
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
+      const defaultSites = ['youtube.com', 'x.com', 'reddit.com'];
+      // Initialize with an empty object for domain-specific scroll counts
+      const scrollCounts = {};
+      
+      // Initialize each default site with 0 scrolls
+      defaultSites.forEach(site => {
+        scrollCounts[site] = 0;
+      });
+      
       browser.storage.sync.set({
         maxScrolls: 30,  // Default max scrolls to 30
-        scrollCount: 0,  // Initial scroll count
-        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Re-confirm Default sites
+        scrollCounts: scrollCounts,  // Object to track per-domain scrolls
+        distractingSites: defaultSites, // Default sites
         resetInterval: 0, // 0 means no auto reset
         lastResetTime: Date.now() // Track when the counter was last reset
       });
@@ -18,7 +27,7 @@ export default defineBackground(() => {
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCount', 'distractingSites', 'resetInterval', 'lastResetTime']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime']).then(sendResponse);
       return true; // Required for async response
     }
     
@@ -43,18 +52,55 @@ export default defineBackground(() => {
     
     if (message.type === 'RESET_COUNTER') {
       const resetTime = Date.now();
-      browser.storage.sync.set({ 
-        scrollCount: 0,
-        lastResetTime: resetTime
-      }).then(() => {
-        // Notify content script to reset counter
-        updateAllContentScripts({ 
-          type: 'RESET_COUNTER',
-          lastResetTime: resetTime
+      
+      // Get current settings first
+      browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
+        const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+        const scrollCounts = result.scrollCounts || {};
+        
+        // Reset all domain-specific counters
+        sites.forEach(site => {
+          scrollCounts[site] = 0;
         });
         
-        sendResponse({ success: true });
+        // Save the reset counters
+        browser.storage.sync.set({ 
+          scrollCounts: scrollCounts,
+          lastResetTime: resetTime
+        }).then(() => {
+          // Notify content script to reset counter
+          updateAllContentScripts({ 
+            type: 'RESET_COUNTER',
+            lastResetTime: resetTime
+          });
+          
+          sendResponse({ success: true });
+        });
       });
+      
+      return true; // Required for async response
+    }
+    
+    // New handler for domain-specific scroll increment
+    if (message.type === 'INCREMENT_SCROLL' && message.domain) {
+      browser.storage.sync.get(['scrollCounts', 'distractingSites']).then(result => {
+        const scrollCounts = result.scrollCounts || {};
+        const domain = message.domain;
+        
+        // Initialize the domain counter if it doesn't exist
+        if (scrollCounts[domain] === undefined) {
+          scrollCounts[domain] = 0;
+        }
+        
+        // Increment the counter for this domain
+        scrollCounts[domain] += 1;
+        
+        // Save the updated counter
+        browser.storage.sync.set({ scrollCounts }).then(() => {
+          sendResponse({ success: true, newCount: scrollCounts[domain] });
+        });
+      });
+      
       return true; // Required for async response
     }
   });
@@ -62,7 +108,7 @@ export default defineBackground(() => {
   // Helper function to update all content scripts
   function updateAllContentScripts(message) {
     browser.storage.sync.get(['distractingSites']).then(result => {
-      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Re-confirm fallback
+      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Fallback
       
       // Create URL patterns for each site
       const urlPatterns = sites.flatMap(site => {
@@ -83,13 +129,18 @@ export default defineBackground(() => {
 
   // Check for time-based reset periodically
   function checkTimeBasedReset() {
-    browser.storage.sync.get(['resetInterval', 'lastResetTime', 'scrollCount']).then(result => {
+    browser.storage.sync.get(['resetInterval', 'lastResetTime', 'scrollCounts', 'distractingSites']).then(result => {
       const resetInterval = result.resetInterval || 0;
       const lastResetTime = result.lastResetTime || Date.now();
-      const scrollCount = result.scrollCount || 0;
+      const scrollCounts = result.scrollCounts || {};
+      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
       
-      // Skip if reset interval is 0 (disabled) or if counter is already 0
-      if (resetInterval <= 0 || scrollCount === 0) return;
+      // Skip if reset interval is 0 (disabled)
+      if (resetInterval <= 0) return;
+      
+      // Check if any site has scrolls
+      const hasScrolls = sites.some(site => (scrollCounts[site] || 0) > 0);
+      if (!hasScrolls) return; // Skip if all counters are already 0
       
       const now = Date.now();
       const timeSinceReset = now - lastResetTime;
@@ -97,8 +148,13 @@ export default defineBackground(() => {
       
       // If it's time for a reset
       if (timeSinceReset >= resetIntervalMs) {
+        // Reset all domain-specific counters
+        sites.forEach(site => {
+          scrollCounts[site] = 0;
+        });
+        
         browser.storage.sync.set({ 
-          scrollCount: 0,
+          scrollCounts: scrollCounts,
           lastResetTime: now
         }).then(() => {
           updateAllContentScripts({ 

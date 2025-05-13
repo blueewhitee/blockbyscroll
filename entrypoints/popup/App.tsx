@@ -5,6 +5,8 @@ export default function App() {
   const [maxScrolls, setMaxScrolls] = useState<number>(30);
   const [maxScrollsInput, setMaxScrollsInput] = useState<string>(() => maxScrolls.toString());
   const [currentScrolls, setCurrentScrolls] = useState<number>(0);
+  const [currentDomain, setCurrentDomain] = useState<string>('');
+  const [scrollCounts, setScrollCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveStatus, setSaveStatus] = useState<string>('');
   const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com']);
@@ -12,13 +14,32 @@ export default function App() {
   const [resetInterval, setResetInterval] = useState<number>(0);
 
   useEffect(() => {
+    // Get current active tab to identify the current domain
+    browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+      const activeTab = tabs[0];
+      if (activeTab && activeTab.url) {
+        try {
+          const url = new URL(activeTab.url);
+          const domain = url.hostname.replace(/^www\./, '');
+          setCurrentDomain(domain);
+        } catch (error) {
+          console.error('Error parsing URL:', error);
+        }
+      }
+    });
+
     // Load settings from storage
     browser.runtime.sendMessage({ type: 'GET_SETTINGS' })
       .then((settings) => {
         const loadedMaxScrolls = settings.maxScrolls || 30;
         setMaxScrolls(loadedMaxScrolls);
-        setCurrentScrolls(settings.scrollCount || 0);
-        setDistractingSites(settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com']);
+        
+        const loadedScrollCounts = settings.scrollCounts || {};
+        setScrollCounts(loadedScrollCounts);
+        
+        const loadedDistractingSites = settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+        setDistractingSites(loadedDistractingSites);
+        
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
       })
@@ -27,6 +48,22 @@ export default function App() {
         setIsLoading(false);
       });
   }, []);
+
+  // Effect to find and set the current scroll count based on domain
+  useEffect(() => {
+    if (currentDomain && Object.keys(scrollCounts).length > 0) {
+      // Find the matching domain from our distracting sites
+      const matchingDomain = distractingSites.find(site => currentDomain.includes(site));
+      
+      if (matchingDomain) {
+        // Show the count for this domain
+        setCurrentScrolls(scrollCounts[matchingDomain] || 0);
+      } else {
+        // Not on a tracked site
+        setCurrentScrolls(0);
+      }
+    }
+  }, [currentDomain, scrollCounts, distractingSites]);
 
   // Effect to sync maxScrollsInput when maxScrolls changes
   useEffect(() => {
@@ -80,7 +117,14 @@ export default function App() {
     setSaveStatus('Resetting...');
     browser.runtime.sendMessage({ type: 'RESET_COUNTER' })
       .then(() => {
+        // Update the local state after reset
+        const resetCounts = { ...scrollCounts };
+        distractingSites.forEach(site => {
+          resetCounts[site] = 0;
+        });
+        setScrollCounts(resetCounts);
         setCurrentScrolls(0);
+        
         setSaveStatus('Counter reset!');
         setTimeout(() => setSaveStatus(''), 2000);
       })
@@ -101,12 +145,26 @@ export default function App() {
 
     if (formattedSite && !distractingSites.includes(formattedSite)) {
       setDistractingSites([...distractingSites, formattedSite]);
+      
+      // Initialize scroll count for new site
+      setScrollCounts(prev => ({
+        ...prev,
+        [formattedSite]: 0
+      }));
+      
       setNewSite('');
     }
   };
 
   const handleRemoveSite = (siteToRemove: string) => {
     setDistractingSites(distractingSites.filter(site => site !== siteToRemove));
+    
+    // Remove from scrollCounts
+    setScrollCounts(prev => {
+      const updated = { ...prev };
+      delete updated[siteToRemove];
+      return updated;
+    });
   };
 
   const handleResetIntervalChange = (value: number) => {

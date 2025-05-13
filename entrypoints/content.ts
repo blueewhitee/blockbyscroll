@@ -8,13 +8,18 @@ export default defineContentScript({
     let scrollCount = 0;
     let maxScrolls = 30; // Default value to 30
     let isBlocked = false;
-    let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Re-confirm Default sites
+    let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     
     // Check if current site is in the distracting sites list
     function isDistractingSite() {
       return distractingSites.some(site => currentHost.includes(site));
+    }
+    
+    // Find the specific domain from the distracting sites list that matches current host
+    function getMatchingDomain() {
+      return distractingSites.find(site => currentHost.includes(site)) || currentHost;
     }
     
     // Create overlay for when scrolling is blocked
@@ -77,14 +82,13 @@ export default defineContentScript({
     async function getSettings() {
       const result = await browser.storage.sync.get({
         maxScrolls: 30, // Fallback to 30
-        scrollCount: 0,
-        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Re-confirm fallback
+        scrollCounts: {}, // New object structure for per-domain counts
+        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Fallback
         resetInterval: 0,
         lastResetTime: Date.now()
       });
       
       maxScrolls = result.maxScrolls;
-      scrollCount = result.scrollCount;
       distractingSites = result.distractingSites;
       resetInterval = result.resetInterval;
       lastResetTime = result.lastResetTime;
@@ -95,7 +99,10 @@ export default defineContentScript({
         return;
       }
       
-      console.log(`ScrollStop loaded on ${currentHost}`);
+      const domain = getMatchingDomain();
+      scrollCount = result.scrollCounts[domain] || 0;
+      
+      console.log(`ScrollStop loaded on ${currentHost}, current scrolls: ${scrollCount}`);
       
       // Add elements to DOM now that we know this is a distracting site
       document.body.appendChild(overlay);
@@ -110,6 +117,12 @@ export default defineContentScript({
         lastResetTime = Date.now();
         saveScrollCount();
       });
+      
+      // Check if we should block based on current count
+      if (scrollCount >= maxScrolls) {
+        isBlocked = true;
+        overlay.style.display = 'flex';
+      }
       
       // Check if reset should happen based on time
       checkTimeBasedReset();
@@ -145,13 +158,45 @@ export default defineContentScript({
       }
     }
     
+    // Increment scroll count and save to storage via background script
+    function incrementScrollCount() {
+      const domain = getMatchingDomain();
+      
+      // Use the background script to handle the storage update
+      browser.runtime.sendMessage({
+        type: 'INCREMENT_SCROLL',
+        domain: domain
+      }).then(response => {
+        if (response && response.success) {
+          scrollCount = response.newCount;
+          updateCounter();
+          
+          if (scrollCount >= maxScrolls) {
+            isBlocked = true;
+            overlay.style.display = 'flex';
+          }
+        }
+      }).catch(err => {
+        console.error('Error incrementing scroll count:', err);
+      });
+    }
+    
     // Save scroll count to storage
     function saveScrollCount() {
-      browser.storage.sync.set({ 
-        scrollCount,
-        lastResetTime
+      const domain = getMatchingDomain();
+      
+      // Get current scrollCounts first
+      browser.storage.sync.get(['scrollCounts']).then(result => {
+        const scrollCounts = result.scrollCounts || {};
+        scrollCounts[domain] = scrollCount;
+        
+        browser.storage.sync.set({ 
+          scrollCounts,
+          lastResetTime
+        }).then(() => {
+          updateCounter();
+        });
       });
-      updateCounter();
     }
     
     function updateCounter() {
@@ -188,13 +233,7 @@ export default defineContentScript({
           
           // Only count significant scrolls
           if (scrollDelta > 100) {
-            scrollCount++;
-            saveScrollCount();
-            
-            if (scrollCount >= maxScrolls) {
-              isBlocked = true;
-              overlay.style.display = 'flex';
-            }
+            incrementScrollCount();
           }
           
           lastScrollTop = currentScrollTop;
@@ -239,7 +278,7 @@ export default defineContentScript({
           lastResetTime = message.lastResetTime;
         }
         
-        saveScrollCount();
+        updateCounter();
       }
     });
     
