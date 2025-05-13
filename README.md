@@ -6,8 +6,9 @@ ScrollStop is a browser extension designed to help you maintain healthy scrollin
 
 ## Features
 
-- 📊 Track your scrolling activity on X/Twitter
+- 📊 Track your scrolling activity on sites addded to blocklist
 - 🛑 Set custom scroll limits to prevent endless doomscrolling
+-  domain-specific scroll counter that tracks scrolls separately for each website
 - 📱 Visual indicators showing your current scroll progress
 - 🔄 Quick reset option when you need to continue browsing
 - ⚙️ Customize settings to fit your browsing habits
