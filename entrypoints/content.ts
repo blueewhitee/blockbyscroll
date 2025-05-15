@@ -53,17 +53,9 @@ export default defineContentScript({
     message.innerHTML = `
       <h1>Scroll limit reached</h1>
       <p>You've reached your scrolling limit for ${currentHost}.</p>
-      <button id="scroll-stop-reset" style="
-        padding: 8px 16px;
-        margin-top: 20px;
-        background-color: #1DA1F2;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 16px;
-      ">Reset and Continue</button>
-      <p style="margin-top: 20px; font-size: 14px;">You can adjust your scroll limit in the extension popup.</p>
+      <p style="margin-top: 20px; font-size: 16px;">Your scroll counter will reset automatically based on your timer settings.</p>
+      <p id="scroll-stop-timer" style="margin-top: 15px; font-size: 18px; color: #1DA1F2;"></p>
+      <p style="margin-top: 10px; font-size: 14px;">You can adjust your scroll limit and reset timer in the extension popup.</p>
     `;
     
     overlay.appendChild(message);
@@ -119,20 +111,41 @@ export default defineContentScript({
       document.body.appendChild(counter);
       counter.style.display = 'block';
       
-      // Set up event listener for reset button
-      document.getElementById('scroll-stop-reset')?.addEventListener('click', () => {
-        isBlocked = false;
-        overlay.style.display = 'none';
-        scrollCount = 0;
-        lastResetTime = Date.now();
-        saveScrollCount();
-      });
-      
       // Check if we should block based on current count
       const effectiveMax = getEffectiveScrollLimit();
       if (scrollCount >= effectiveMax) {
         isBlocked = true;
         overlay.style.display = 'flex';
+        
+        // Start regular timer updates when overlay is visible
+        if (resetInterval > 0) {
+          const timerUpdateInterval = setInterval(() => {
+            updateCounter();
+            
+            // Check if we should unblock based on time
+            const now = Date.now();
+            const timeSinceReset = now - lastResetTime;
+            const resetIntervalMs = resetInterval * 60 * 1000;
+            
+            if (timeSinceReset >= resetIntervalMs) {
+              isBlocked = false;
+              overlay.style.display = 'none';
+              clearInterval(timerUpdateInterval);
+            }
+          }, 1000);
+          
+          // Clean up interval when overlay is hidden
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.attributeName === 'style' && overlay.style.display === 'none') {
+                clearInterval(timerUpdateInterval);
+                observer.disconnect();
+              }
+            });
+          });
+          
+          observer.observe(overlay, { attributes: true });
+        }
       }
       
       // Check if reset should happen based on time
@@ -227,7 +240,20 @@ export default defineContentScript({
         const minutesRemaining = Math.floor(timeRemaining / (60 * 1000));
         const secondsRemaining = Math.floor((timeRemaining % (60 * 1000)) / 1000);
         
-        counter.textContent += ` | Reset in: ${minutesRemaining}m ${secondsRemaining}s`;
+        const timerText = `Reset in: ${minutesRemaining}m ${secondsRemaining}s`;
+        counter.textContent += ` | ${timerText}`;
+        
+        // Update the timer in the overlay too
+        const overlayTimer = document.getElementById('scroll-stop-timer');
+        if (overlayTimer) {
+          overlayTimer.textContent = timerText;
+        }
+      } else {
+        // If no reset timer is set, update the message accordingly
+        const overlayTimer = document.getElementById('scroll-stop-timer');
+        if (overlayTimer) {
+          overlayTimer.textContent = 'No auto-reset timer configured. Set one in the extension popup.';
+        }
       }
     }
     

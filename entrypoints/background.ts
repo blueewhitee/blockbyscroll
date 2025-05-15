@@ -17,7 +17,7 @@ export default defineBackground(() => {
         maxScrolls: 30,  // Default max scrolls to 30
         scrollCounts: scrollCounts,  // Object to track per-domain scrolls
         distractingSites: defaultSites, // Default sites
-        resetInterval: 0, // 0 means no auto reset
+        resetInterval: 30, // Default to 30 minutes for auto reset
         lastResetTime: Date.now(), // Track when the counter was last reset
         customLimits: {} // Store custom limits per domain
       });
