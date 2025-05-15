@@ -1,3 +1,14 @@
+declare global {
+  interface Window {
+    _scrollStopObserver: MutationObserver | null;
+    _twitterFixInterval: number | null;
+  }
+  
+  interface HTMLElement {
+    _reelsObserved?: boolean;
+  }
+}
+
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*'], // Match all sites, we'll filter in the main function
   main() {
@@ -36,17 +47,22 @@ export default defineContentScript({
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.85);
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.95);
       color: white;
       display: none;
-      z-index: 10000;
+      z-index: 2147483647; /* Maximum z-index value */
       flex-direction: column;
       justify-content: center;
       align-items: center;
       text-align: center;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: auto !important;
+      touch-action: none;
     `;
     
     const message = document.createElement('div');
@@ -75,7 +91,92 @@ export default defineContentScript({
       z-index: 9999;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       display: none;
+      pointer-events: none;
     `;
+    
+    // Event handlers for blocking scroll
+    function preventWheelScroll(e) {
+      if (isBlocked) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }
+    
+    function preventKeyScroll(e) {
+      // Space, Page Up/Down, End, Home, Up, Down
+      const keys = [32, 33, 34, 35, 36, 38, 40];
+      if (isBlocked && keys.includes(e.keyCode)) {
+        e.preventDefault();
+        return false;
+      }
+    }
+    
+    // Block/unblock scrolling
+    function setScrollBlocking(block) {
+      isBlocked = block;
+      
+      if (block) {
+        // Save current scroll position
+        document.body.setAttribute('data-scroll-position', window.scrollY.toString());
+        
+        // Add event listeners to prevent scrolling
+        window.addEventListener('wheel', preventWheelScroll, { passive: false });
+        window.addEventListener('touchmove', preventWheelScroll, { passive: false });
+        window.addEventListener('keydown', preventKeyScroll);
+        
+        // Fix body
+        const scrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+        
+        // Show overlay
+        overlay.style.display = 'flex';
+        
+        // Set up regular timer updates
+        startTimerUpdates();
+      } else {
+        // Remove event listeners
+        window.removeEventListener('wheel', preventWheelScroll);
+        window.removeEventListener('touchmove', preventWheelScroll);
+        window.removeEventListener('keydown', preventKeyScroll);
+        
+        // Restore body
+        const scrollY = parseInt(document.body.getAttribute('data-scroll-position') || '0', 10);
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+        
+        // Hide overlay
+        overlay.style.display = 'none';
+        
+        // Stop timer updates
+        stopTimerUpdates();
+      }
+    }
+    
+    // Timer update interval reference
+    let timerUpdateInterval = null;
+    
+    function startTimerUpdates() {
+      if (resetInterval > 0 && !timerUpdateInterval) {
+        timerUpdateInterval = setInterval(() => {
+          updateCounter();
+          checkTimeBasedReset();
+        }, 1000);
+      }
+    }
+    
+    function stopTimerUpdates() {
+      if (timerUpdateInterval) {
+        clearInterval(timerUpdateInterval);
+        timerUpdateInterval = null;
+      }
+    }
     
     // Get settings from storage
     async function getSettings() {
@@ -114,38 +215,7 @@ export default defineContentScript({
       // Check if we should block based on current count
       const effectiveMax = getEffectiveScrollLimit();
       if (scrollCount >= effectiveMax) {
-        isBlocked = true;
-        overlay.style.display = 'flex';
-        
-        // Start regular timer updates when overlay is visible
-        if (resetInterval > 0) {
-          const timerUpdateInterval = setInterval(() => {
-            updateCounter();
-            
-            // Check if we should unblock based on time
-            const now = Date.now();
-            const timeSinceReset = now - lastResetTime;
-            const resetIntervalMs = resetInterval * 60 * 1000;
-            
-            if (timeSinceReset >= resetIntervalMs) {
-              isBlocked = false;
-              overlay.style.display = 'none';
-              clearInterval(timerUpdateInterval);
-            }
-          }, 1000);
-          
-          // Clean up interval when overlay is hidden
-          const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-              if (mutation.attributeName === 'style' && overlay.style.display === 'none') {
-                clearInterval(timerUpdateInterval);
-                observer.disconnect();
-              }
-            });
-          });
-          
-          observer.observe(overlay, { attributes: true });
-        }
+        setScrollBlocking(true);
       }
       
       // Check if reset should happen based on time
@@ -154,14 +224,7 @@ export default defineContentScript({
       // Set up scroll event listener
       setupScrollListener();
       
-      // Set up timer if needed
-      if (resetInterval > 0) {
-        setInterval(() => {
-          checkTimeBasedReset();
-          updateCounter();
-        }, 1000);
-      }
-      
+      // Update counter
       updateCounter();
     }
     
@@ -175,8 +238,7 @@ export default defineContentScript({
       
       if (timeSinceReset >= resetIntervalMs) {
         scrollCount = 0;
-        isBlocked = false;
-        overlay.style.display = 'none';
+        setScrollBlocking(false);
         lastResetTime = now;
         saveScrollCount();
       }
@@ -198,8 +260,7 @@ export default defineContentScript({
           // Check against the effective limit (custom or global)
           const effectiveMax = getEffectiveScrollLimit();
           if (scrollCount >= effectiveMax) {
-            isBlocked = true;
-            overlay.style.display = 'flex';
+            setScrollBlocking(true);
           }
         }
       }).catch(err => {
@@ -260,7 +321,7 @@ export default defineContentScript({
     // Detect scrolling
     function setupScrollListener() {
       let lastScrollTop = window.scrollY;
-      let scrollTimeout: number;
+      let scrollTimeout;
       let lastUrl = window.location.href;
       
       // Set up scroll event listener for regular scrolling
@@ -306,6 +367,87 @@ export default defineContentScript({
           clearInterval(urlCheckInterval);
         });
       }
+      
+      // Special handling for Instagram Reels - detect URL changes
+      if (currentHost.includes('instagram.com')) {
+        // Check for URL changes periodically
+        const urlCheckInterval = setInterval(() => {
+          if (isBlocked) return;
+          
+          const currentUrl = window.location.href;
+          
+          // Check if this is an Instagram Reels page
+          const isReelsPage = currentUrl.includes('/reel/') || 
+                            currentUrl.includes('/reels/') ||
+                            document.querySelector('div[role="dialog"] video') !== null;
+          
+          // If URL changed and we're on a reels page, count it as a scroll
+          if (isReelsPage && currentUrl !== lastUrl) {
+            console.log('Instagram Reels navigation detected', { from: lastUrl, to: currentUrl });
+            incrementScrollCount();
+            lastUrl = currentUrl;
+          }
+        }, 500); // Check every 500ms
+
+        // Also track swipe navigation which might not change URL
+        const detectReelSwipes = () => {
+          const reelContainers = document.querySelectorAll('div[role="dialog"], div[data-visualcompletion="ignore-dynamic"]');
+          
+          reelContainers.forEach(container => {
+            if (!container._reelsObserved) {
+              container._reelsObserved = true;
+              
+              // Set up mutation observer to detect new reels content
+              const reelsObserver = new MutationObserver((mutations) => {
+                // Check if we're potentially in a reel view
+                const isInReelView = document.querySelector('div[role="dialog"] video') !== null;
+                
+                if (isInReelView && !isBlocked) {
+                  // Look for key mutations that suggest navigation between reels
+                  const significantChange = mutations.some(mutation => {
+                    // Video source changed
+                    return mutation.type === 'attributes' && 
+                           mutation.target instanceof HTMLVideoElement ||
+                           // New video element
+                           mutation.addedNodes.length > 0 && 
+                           Array.from(mutation.addedNodes).some(node => 
+                             node instanceof HTMLElement && node.querySelector('video') !== null
+                           );
+                  });
+                  
+                  if (significantChange) {
+                    console.log('Instagram Reels swipe navigation detected');
+                    incrementScrollCount();
+                  }
+                }
+              });
+              
+              reelsObserver.observe(container, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['src', 'style']
+              });
+              
+              // Clean up when page unloads
+              window.addEventListener('beforeunload', () => {
+                reelsObserver.disconnect();
+              });
+            }
+          });
+        };
+        
+        // Run initially
+        detectReelSwipes();
+        
+        // And check periodically for new reel containers
+        setInterval(detectReelSwipes, 2000);
+        
+        // Clean up interval when page unloads
+        window.addEventListener('beforeunload', () => {
+          clearInterval(urlCheckInterval);
+        });
+      }
     }
     
     // Listen for messages from popup/background
@@ -319,7 +461,7 @@ export default defineContentScript({
           // If current site is no longer in the list, remove overlay and counter
           if (!isDistractingSite()) {
             counter.style.display = 'none';
-            overlay.style.display = 'none';
+            setScrollBlocking(false);
             return;
           } else {
             counter.style.display = 'block';
@@ -339,17 +481,14 @@ export default defineContentScript({
         // Check if we should block based on updated settings
         const effectiveMax = getEffectiveScrollLimit();
         if (scrollCount >= effectiveMax && !isBlocked) {
-          isBlocked = true;
-          overlay.style.display = 'flex';
+          setScrollBlocking(true);
         } else if (scrollCount < effectiveMax && isBlocked) {
           // If the limit was increased and we're now below it, unblock
-          isBlocked = false;
-          overlay.style.display = 'none';
+          setScrollBlocking(false);
         }
       } else if (message.type === 'RESET_COUNTER') {
         scrollCount = 0;
-        isBlocked = false;
-        overlay.style.display = 'none';
+        setScrollBlocking(false);
         
         if (message.lastResetTime) {
           lastResetTime = message.lastResetTime;
@@ -357,6 +496,11 @@ export default defineContentScript({
         
         updateCounter();
       }
+    });
+    
+    // Make sure to clean up when unloading
+    window.addEventListener('beforeunload', () => {
+      stopTimerUpdates();
     });
     
     // Initialize

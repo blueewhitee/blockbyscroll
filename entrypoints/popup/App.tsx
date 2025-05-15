@@ -236,7 +236,7 @@ export default function App() {
   return (
     <div className="container">
       <header>
-        <h1>ScrollStop</h1>
+        <h1>NoMoScroll</h1>
         <p className="subtitle">Focus and control your browsing habits</p>
       </header>
       
@@ -271,7 +271,7 @@ export default function App() {
           onBlur={handleMaxScrollsBlur}
         />
         <p style={{fontSize: '12px', color: 'var(--secondary-text)', margin: '4px 0'}}>
-          Click a site icon to set custom limits. Double-click or use the ✕ to remove from blocklist.
+          Click a site icon to set custom limits. use the ✕ to remove from blocklist.
         </p>
       </div>
 
