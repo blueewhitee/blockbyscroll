@@ -11,6 +11,7 @@ export default defineContentScript({
     let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
+    let customLimits: Record<string, number> = {}; // Custom limits per domain
     
     // Check if current site is in the distracting sites list
     function isDistractingSite() {
@@ -20,6 +21,12 @@ export default defineContentScript({
     // Find the specific domain from the distracting sites list that matches current host
     function getMatchingDomain() {
       return distractingSites.find(site => currentHost.includes(site)) || currentHost;
+    }
+    
+    // Get effective scroll limit for current domain
+    function getEffectiveScrollLimit() {
+      const domain = getMatchingDomain();
+      return customLimits[domain] || maxScrolls;
     }
     
     // Create overlay for when scrolling is blocked
@@ -85,13 +92,15 @@ export default defineContentScript({
         scrollCounts: {}, // New object structure for per-domain counts
         distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Fallback
         resetInterval: 0,
-        lastResetTime: Date.now()
+        lastResetTime: Date.now(),
+        customLimits: {} // Custom scroll limits per domain
       });
       
       maxScrolls = result.maxScrolls;
       distractingSites = result.distractingSites;
       resetInterval = result.resetInterval;
       lastResetTime = result.lastResetTime;
+      customLimits = result.customLimits;
       
       // Only proceed if current site is in the distracting sites list
       if (!isDistractingSite()) {
@@ -102,7 +111,8 @@ export default defineContentScript({
       const domain = getMatchingDomain();
       scrollCount = result.scrollCounts[domain] || 0;
       
-      console.log(`ScrollStop loaded on ${currentHost}, current scrolls: ${scrollCount}`);
+      const effectiveLimit = getEffectiveScrollLimit();
+      console.log(`ScrollStop loaded on ${currentHost}, current scrolls: ${scrollCount}/${effectiveLimit} ${customLimits[domain] ? '(custom limit)' : '(global limit)'}`);
       
       // Add elements to DOM now that we know this is a distracting site
       document.body.appendChild(overlay);
@@ -119,7 +129,8 @@ export default defineContentScript({
       });
       
       // Check if we should block based on current count
-      if (scrollCount >= maxScrolls) {
+      const effectiveMax = getEffectiveScrollLimit();
+      if (scrollCount >= effectiveMax) {
         isBlocked = true;
         overlay.style.display = 'flex';
       }
@@ -171,7 +182,9 @@ export default defineContentScript({
           scrollCount = response.newCount;
           updateCounter();
           
-          if (scrollCount >= maxScrolls) {
+          // Check against the effective limit (custom or global)
+          const effectiveMax = getEffectiveScrollLimit();
+          if (scrollCount >= effectiveMax) {
             isBlocked = true;
             overlay.style.display = 'flex';
           }
@@ -200,7 +213,8 @@ export default defineContentScript({
     }
     
     function updateCounter() {
-      counter.textContent = `Scrolls: ${scrollCount}/${maxScrolls}`;
+      const effectiveMax = getEffectiveScrollLimit();
+      counter.textContent = `Scrolls: ${scrollCount}/${effectiveMax}`;
       
       // Also update timer display if reset interval is enabled
       if (resetInterval > 0) {
@@ -221,7 +235,9 @@ export default defineContentScript({
     function setupScrollListener() {
       let lastScrollTop = window.scrollY;
       let scrollTimeout: number;
+      let lastUrl = window.location.href;
       
+      // Set up scroll event listener for regular scrolling
       window.addEventListener('scroll', () => {
         if (isBlocked) return;
         
@@ -239,6 +255,31 @@ export default defineContentScript({
           lastScrollTop = currentScrollTop;
         }, 300);
       });
+
+      // Special handling for YouTube Shorts - detect URL changes
+      if (currentHost.includes('youtube.com')) {
+        // Check for URL changes periodically 
+        const urlCheckInterval = setInterval(() => {
+          if (isBlocked) return;
+          
+          const currentUrl = window.location.href;
+          
+          // Check if this is a YouTube Shorts page
+          const isShortsPage = currentUrl.includes('/shorts/');
+          
+          // If URL changed and we're on a shorts page, count it as a scroll
+          if (isShortsPage && currentUrl !== lastUrl) {
+            console.log('YouTube Shorts navigation detected', { from: lastUrl, to: currentUrl });
+            incrementScrollCount();
+            lastUrl = currentUrl;
+          }
+        }, 500); // Check every 500ms
+
+        // Clean up interval when page unloads
+        window.addEventListener('beforeunload', () => {
+          clearInterval(urlCheckInterval);
+        });
+      }
     }
     
     // Listen for messages from popup/background
@@ -263,11 +304,21 @@ export default defineContentScript({
           resetInterval = message.resetInterval;
         }
         
+        if (message.customLimits) {
+          customLimits = message.customLimits;
+        }
+        
         updateCounter();
         
-        if (scrollCount >= maxScrolls && !isBlocked) {
+        // Check if we should block based on updated settings
+        const effectiveMax = getEffectiveScrollLimit();
+        if (scrollCount >= effectiveMax && !isBlocked) {
           isBlocked = true;
           overlay.style.display = 'flex';
+        } else if (scrollCount < effectiveMax && isBlocked) {
+          // If the limit was increased and we're now below it, unblock
+          isBlocked = false;
+          overlay.style.display = 'none';
         }
       } else if (message.type === 'RESET_COUNTER') {
         scrollCount = 0;

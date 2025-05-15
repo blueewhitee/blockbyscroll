@@ -12,6 +12,10 @@ export default function App() {
   const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com']);
   const [newSite, setNewSite] = useState<string>('');
   const [resetInterval, setResetInterval] = useState<number>(0);
+  // New state for custom limits
+  const [customLimits, setCustomLimits] = useState<Record<string, number>>({});
+  const [editingSite, setEditingSite] = useState<string | null>(null);
+  const [customLimitInput, setCustomLimitInput] = useState<string>('');
 
   useEffect(() => {
     // Get current active tab to identify the current domain
@@ -39,6 +43,11 @@ export default function App() {
         
         const loadedDistractingSites = settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
         setDistractingSites(loadedDistractingSites);
+        
+        // Load custom limits if they exist
+        if (settings.customLimits) {
+          setCustomLimits(settings.customLimits);
+        }
         
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
@@ -87,6 +96,39 @@ export default function App() {
     setMaxScrolls(num);
   };
 
+  // Handle edit site by double-clicking on a site icon
+  const handleEditSite = (site: string) => {
+    setEditingSite(site);
+    setCustomLimitInput(customLimits[site]?.toString() || '');
+  };
+
+  // Handle custom limit input change
+  const handleCustomLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomLimitInput(e.target.value);
+  };
+
+  // Save custom limit for site
+  const saveCustomLimit = () => {
+    if (!editingSite) return;
+    
+    const limit = parseInt(customLimitInput);
+    if (!isNaN(limit) && limit > 0) {
+      setCustomLimits(prev => ({
+        ...prev,
+        [editingSite]: limit
+      }));
+    } else if (customLimitInput === '') {
+      // Remove the custom limit if input is empty
+      setCustomLimits(prev => {
+        const updated = { ...prev };
+        delete updated[editingSite];
+        return updated;
+      });
+    }
+    
+    setEditingSite(null);
+  };
+
   const handleSave = () => {
     setSaveStatus('Saving...');
     let currentNumVal = parseInt(maxScrollsInput);
@@ -101,7 +143,8 @@ export default function App() {
       type: 'SAVE_SETTINGS',
       maxScrolls: scrollsToSave,
       distractingSites,
-      resetInterval
+      resetInterval,
+      customLimits
     })
       .then(() => {
         setSaveStatus('Saved!');
@@ -159,8 +202,14 @@ export default function App() {
   const handleRemoveSite = (siteToRemove: string) => {
     setDistractingSites(distractingSites.filter(site => site !== siteToRemove));
     
-    // Remove from scrollCounts
+    // Remove from scrollCounts and customLimits
     setScrollCounts(prev => {
+      const updated = { ...prev };
+      delete updated[siteToRemove];
+      return updated;
+    });
+    
+    setCustomLimits(prev => {
       const updated = { ...prev };
       delete updated[siteToRemove];
       return updated;
@@ -173,6 +222,11 @@ export default function App() {
 
   const getFaviconUrl = (domain: string) => {
     return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${domain}&size=16`;
+  };
+
+  // Get the effective scroll limit for a site (custom or global)
+  const getEffectiveLimit = (site: string): number => {
+    return customLimits[site] || maxScrolls;
   };
 
   if (isLoading) {
@@ -188,17 +242,25 @@ export default function App() {
       
       <div className="stat-card">
         <div className="stat-label">Current Scrolls</div>
-        <div className="stat-value">{currentScrolls} / {maxScrolls}</div>
+        <div className="stat-value">
+          {currentScrolls} / {currentDomain && getEffectiveLimit(distractingSites.find(site => currentDomain.includes(site)) || '')}
+        </div>
         <div className="progress-bar">
           <div 
             className="progress-fill" 
-            style={{ width: `${Math.min(100, (currentScrolls / maxScrolls) * 100)}%` }}
+            style={{ 
+              width: `${Math.min(100, (currentScrolls / (
+                currentDomain ? 
+                getEffectiveLimit(distractingSites.find(site => currentDomain.includes(site)) || '') : 
+                maxScrolls
+              )) * 100)}%` 
+            }}
           />
         </div>
       </div>
       
       <div className="settings-group">
-        <label htmlFor="max-scrolls">Scroll limit per session:</label>
+        <label htmlFor="max-scrolls">Global scroll limit:</label>
         <input
           id="max-scrolls"
           type="text"
@@ -208,6 +270,9 @@ export default function App() {
           onChange={handleMaxScrollsInputChange}
           onBlur={handleMaxScrollsBlur}
         />
+        <p style={{fontSize: '12px', color: 'var(--secondary-text)', margin: '4px 0'}}>
+          Click a site icon to set custom limits. Double-click or use the ✕ to remove from blocklist.
+        </p>
       </div>
 
       <div className="settings-group">
@@ -230,12 +295,39 @@ export default function App() {
         <label>Blocked Sites:</label>
         <div className="sites-container">
           {distractingSites.map((site) => (
-            <div key={site} className="site-item" title={site}>
+            <div 
+              key={site} 
+              className="site-item" 
+              title={customLimits[site] ? `${site} (Custom limit: ${customLimits[site]})` : site}
+              onDoubleClick={() => handleRemoveSite(site)}
+              onClick={() => handleEditSite(site)}
+            >
               <img src={getFaviconUrl(site)} alt={`${site} favicon`} className="site-favicon" />
               <span className="site-name">{site}</span>
+              {customLimits[site] && (
+                <span 
+                  className="custom-limit-badge" 
+                  style={{
+                    position: 'absolute',
+                    bottom: '-5px',
+                    right: '-5px',
+                    backgroundColor: 'var(--primary-color)',
+                    color: 'white',
+                    borderRadius: '8px',
+                    padding: '0 4px',
+                    fontSize: '9px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {customLimits[site]}
+                </span>
+              )}
               <button
-                className="remove-site"
-                onClick={() => handleRemoveSite(site)}
+                className="remove-site-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveSite(site);
+                }}
                 aria-label={`Remove ${site}`}
                 title={`Remove ${site}`}
               >
@@ -249,6 +341,81 @@ export default function App() {
             </p>
           )}
         </div>
+
+        {/* Custom limit editing modal */}
+        {editingSite && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+            }}
+          >
+            <div 
+              style={{
+                backgroundColor: 'white',
+                padding: '15px',
+                borderRadius: '8px',
+                width: '280px',
+                boxShadow: '0 3px 10px rgba(0,0,0,0.3)'
+              }}
+            >
+              <h3 style={{margin: '0 0 10px'}}>Custom limit for {editingSite}</h3>
+              <p style={{margin: '0 0 15px', fontSize: '13px'}}>
+                Set a custom scroll limit for this site or leave empty to use the global limit.
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={customLimitInput}
+                onChange={handleCustomLimitChange}
+                placeholder="Enter custom limit"
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  marginBottom: '15px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)'
+                }}
+              />
+              <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                <button 
+                  onClick={() => setEditingSite(null)} 
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: '#f0f0f0',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={saveCustomLimit}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: 'var(--primary-color)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="add-site">
           <input
             type="text"

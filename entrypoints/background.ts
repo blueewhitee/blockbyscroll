@@ -18,7 +18,8 @@ export default defineBackground(() => {
         scrollCounts: scrollCounts,  // Object to track per-domain scrolls
         distractingSites: defaultSites, // Default sites
         resetInterval: 0, // 0 means no auto reset
-        lastResetTime: Date.now() // Track when the counter was last reset
+        lastResetTime: Date.now(), // Track when the counter was last reset
+        customLimits: {} // Store custom limits per domain
       });
       console.log('ScrollStop: Default settings initialized');
     }
@@ -27,7 +28,7 @@ export default defineBackground(() => {
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits']).then(sendResponse);
       return true; // Required for async response
     }
     
@@ -35,14 +36,16 @@ export default defineBackground(() => {
       browser.storage.sync.set({ 
         maxScrolls: message.maxScrolls,
         distractingSites: message.distractingSites,
-        resetInterval: message.resetInterval
+        resetInterval: message.resetInterval,
+        customLimits: message.customLimits || {}
       }).then(() => {
         // Notify content script about updated settings
         updateAllContentScripts({
           type: 'SETTINGS_UPDATED',
           maxScrolls: message.maxScrolls,
           distractingSites: message.distractingSites,
-          resetInterval: message.resetInterval
+          resetInterval: message.resetInterval,
+          customLimits: message.customLimits || {}
         });
         
         sendResponse({ success: true });
