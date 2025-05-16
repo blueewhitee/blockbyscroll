@@ -14,7 +14,14 @@ export default defineConfig({
     action: {
       default_popup: 'popup/index.html',
       default_title: 'NoMoScroll Settings'
+    },
+    // Explicitly defining your custom icons
+    icons: {
+      "16": "icon/16.jpg",
+      "32": "icon/32.jpg",
+      "48": "icon/48.jpg",
+      "96": "icon/96.jpg",
+      "128": "icon/128.jpg"
     }
-    // WXT will auto-discover icons in the public directory
   }
 });
