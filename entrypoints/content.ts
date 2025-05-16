@@ -134,9 +134,6 @@ export default defineContentScript({
         
         // Show overlay
         overlay.style.display = 'flex';
-        
-        // Set up regular timer updates
-        startTimerUpdates();
       } else {
         // Remove event listeners
         window.removeEventListener('wheel', preventWheelScroll);
@@ -153,10 +150,10 @@ export default defineContentScript({
         
         // Hide overlay
         overlay.style.display = 'none';
-        
-        // Stop timer updates
-        stopTimerUpdates();
       }
+      
+      // Note: We've removed the startTimerUpdates and stopTimerUpdates calls from here
+      // since we now manage the timer independently of blocking status
     }
     
     // Timer update interval reference
@@ -226,6 +223,11 @@ export default defineContentScript({
       
       // Update counter
       updateCounter();
+      
+      // Start timer updates immediately if reset interval is enabled
+      if (resetInterval > 0) {
+        startTimerUpdates();
+      }
     }
     
     // Check if we should reset based on time
@@ -345,6 +347,7 @@ export default defineContentScript({
 
       // Special handling for YouTube Shorts - detect URL changes
       if (currentHost.includes('youtube.com')) {
+        console.log('YouTube detected - setting up special scroll detection');
         // Check for URL changes periodically 
         const urlCheckInterval = setInterval(() => {
           if (isBlocked) return;
@@ -354,12 +357,25 @@ export default defineContentScript({
           // Check if this is a YouTube Shorts page
           const isShortsPage = currentUrl.includes('/shorts/');
           
-          // If URL changed and we're on a shorts page, count it as a scroll
+          // For all YouTube pages (not just Shorts), detect regular scrolling  
+          const currentScrollTop = window.scrollY;
+          const scrollDelta = Math.abs(currentScrollTop - lastScrollTop);
+          
+          // Only count significant scrolls
+          if (scrollDelta > 100) {
+            console.log('YouTube scroll detected - delta:', scrollDelta);
+            incrementScrollCount();
+          }
+          
+          // Additional increment for Shorts navigation
           if (isShortsPage && currentUrl !== lastUrl) {
             console.log('YouTube Shorts navigation detected', { from: lastUrl, to: currentUrl });
             incrementScrollCount();
             lastUrl = currentUrl;
           }
+          
+          // Update last scroll position
+          lastScrollTop = currentScrollTop;
         }, 500); // Check every 500ms
 
         // Clean up interval when page unloads
@@ -462,6 +478,7 @@ export default defineContentScript({
           if (!isDistractingSite()) {
             counter.style.display = 'none';
             setScrollBlocking(false);
+            stopTimerUpdates(); // Stop timer updates if no longer a distraction site
             return;
           } else {
             counter.style.display = 'block';
@@ -470,6 +487,16 @@ export default defineContentScript({
         
         if (message.resetInterval !== undefined) {
           resetInterval = message.resetInterval;
+          
+          // Update timer interval based on new resetInterval
+          if (resetInterval > 0) {
+            // Restart timer if needed
+            stopTimerUpdates();
+            startTimerUpdates();
+          } else {
+            // Stop timer if interval is disabled
+            stopTimerUpdates();
+          }
         }
         
         if (message.customLimits) {
@@ -487,6 +514,7 @@ export default defineContentScript({
           setScrollBlocking(false);
         }
       } else if (message.type === 'RESET_COUNTER') {
+        console.log(`RESET_COUNTER received on ${currentHost}, resetting scrollCount from ${scrollCount} to 0`);
         scrollCount = 0;
         setScrollBlocking(false);
         
@@ -505,5 +533,26 @@ export default defineContentScript({
     
     // Initialize
     getSettings();
+    
+    // Set up fullscreen change detection
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    function handleFullscreenChange() {
+      const isFullScreen = document.fullscreenElement || 
+                          document.webkitFullscreenElement || 
+                          document.mozFullScreenElement || 
+                          document.msFullscreenElement;
+      
+      if (isFullScreen) {
+        // Hide counter when in fullscreen
+        counter.style.display = 'none';
+      } else if (isDistractingSite()) {
+        // Show counter again when exiting fullscreen (only if still on a distracting site)
+        counter.style.display = 'block';
+      }
+    }
   },
 });

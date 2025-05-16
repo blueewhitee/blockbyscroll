@@ -132,25 +132,36 @@ export default defineBackground(() => {
 
   // Check for time-based reset periodically
   function checkTimeBasedReset() {
+    console.log('Checking time-based reset...');
     browser.storage.sync.get(['resetInterval', 'lastResetTime', 'scrollCounts', 'distractingSites']).then(result => {
       const resetInterval = result.resetInterval || 0;
       const lastResetTime = result.lastResetTime || Date.now();
       const scrollCounts = result.scrollCounts || {};
       const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
       
+      console.log(`Reset check - interval: ${resetInterval}min, scrollCounts:`, scrollCounts);
+      
       // Skip if reset interval is 0 (disabled)
-      if (resetInterval <= 0) return;
+      if (resetInterval <= 0) {
+        console.log('Auto-reset disabled, skipping check');
+        return;
+      }
       
       // Check if any site has scrolls
       const hasScrolls = sites.some(site => (scrollCounts[site] || 0) > 0);
-      if (!hasScrolls) return; // Skip if all counters are already 0
+      if (!hasScrolls) {
+        console.log('No sites have scrolls, skipping reset');
+        return; // Skip if all counters are already 0
+      }
       
       const now = Date.now();
       const timeSinceReset = now - lastResetTime;
       const resetIntervalMs = resetInterval * 60 * 1000; // Convert minutes to ms
+      console.log(`Time since last reset: ${Math.floor(timeSinceReset/1000)}s, Reset interval: ${resetIntervalMs/1000}s`);
       
       // If it's time for a reset
       if (timeSinceReset >= resetIntervalMs) {
+        console.log('Time for reset! Resetting all counters...');
         // Reset all domain-specific counters
         sites.forEach(site => {
           scrollCounts[site] = 0;
