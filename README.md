@@ -1,8 +1,8 @@
-# ScrollStop
+# NoMoScroll
 
 **Control your scrolling and prevent doomscrolling**
 
-ScrollStop is a browser extension designed to help you maintain healthy scrolling habits on social media and other distracting site by limiting how much you can scroll in a single session.
+NoMoScroll is a browser extension designed to help you maintain healthy scrolling habits on social media and other distracting site by limiting how much you can scroll in a single session.
 
 ## Features
 
@@ -13,7 +13,7 @@ ScrollStop is a browser extension designed to help you maintain healthy scrollin
 - ⏱️ Optional auto-reset timer to refresh counters automatically
 - ⚙️ Customizable blocklist to manage which sites are monitored
 
-## Why ScrollStop?
+## Why NoMoScroll?
 
 Social media platforms and content sites are designed to keep you scrolling and consuming content endlessly. This can lead to:
 - Reduced productivity
@@ -21,11 +21,11 @@ Social media platforms and content sites are designed to keep you scrolling and 
 - Mental fatigue
 - Time wasted
 
-ScrollStop helps you take control of your scrolling habits by giving you a visual indicator of how much you've scrolled and blocking further scrolling once you've reached your preset limit.
+NoMoScroll helps you take control of your scrolling habits by giving you a visual indicator of how much you've scrolled and blocking further scrolling once you've reached your preset limit.
 
 ## How It Works
 
-1. **Track Scrolling**: ScrollStop counts significant scroll actions on your chosen sites
+1. **Track Scrolling**: NoMoScroll counts significant scroll actions on your chosen sites
 2. **Set Limits**: You decide how many scrolls you want to allow yourself (globally or per site)
 3. **Block On Limit**: Once you reach your limit, a friendly overlay prevents further scrolling
 4. **Reset When Ready**: You can choose to reset the counter manually or set an automatic timer
@@ -50,11 +50,11 @@ ScrollStop helps you take control of your scrolling habits by giving you a visua
 
 ## Example Usage
 
-1. After installing the extension, click on the ScrollStop icon in your browser's toolbar
+1. After installing the extension, click on the NoMoScroll icon in your browser's toolbar
 2. Set your global maximum scroll count
 3. Add websites to your blocklist that you want to monitor (YouTube, X/Twitter, Reddit are added by default)
 4. Optionally set custom scroll limits for specific sites by clicking on their icons
-5. Browse the web as normal - ScrollStop will only monitor sites on your blocklist
+5. Browse the web as normal - NoMoScroll will only monitor sites on your blocklist
 6. A small counter will appear in the bottom-right corner when on monitored sites
 7. When you reach your limit, an overlay will appear, preventing further scrolling
 8. You can either close the tab or click "Reset and Continue" to reset the counter
@@ -62,7 +62,7 @@ ScrollStop helps you take control of your scrolling habits by giving you a visua
 
 ## Privacy
 
-ScrollStop operates locally in your browser and doesn't send any data to external servers. Your browsing data and settings are stored only in your browser's local storage.
+NoMoScroll operates locally in your browser and doesn't send any data to external servers. Your browsing data and settings are stored only in your browser's local storage.
 
 ## License
 
