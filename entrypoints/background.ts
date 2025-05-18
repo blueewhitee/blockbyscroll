@@ -22,7 +22,11 @@ export default defineBackground(() => {
         distractingSites: defaultSites, // Default sites
         resetInterval: 30, // Default to 30 minutes for auto reset
         lastResetTime: Date.now(), // Track when the counter was last reset
-        customLimits: {} // Store custom limits per domain
+        customLimits: {}, // Store custom limits per domain
+        youtubeSettings: {  // YouTube-specific settings
+          hideShorts: false,
+          hideHomeFeed: false
+        }
       });
       console.log('ScrollStop: Default settings initialized');
     }
@@ -31,7 +35,7 @@ export default defineBackground(() => {
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings']).then(sendResponse);
       return true; // Required for async response
     }
     
@@ -40,7 +44,8 @@ export default defineBackground(() => {
         maxScrolls: message.maxScrolls,
         distractingSites: message.distractingSites,
         resetInterval: message.resetInterval,
-        customLimits: message.customLimits || {}
+        customLimits: message.customLimits || {},
+        youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
       }).then(() => {
         // Notify content script about updated settings
         updateAllContentScripts({
@@ -48,7 +53,8 @@ export default defineBackground(() => {
           maxScrolls: message.maxScrolls,
           distractingSites: message.distractingSites,
           resetInterval: message.resetInterval,
-          customLimits: message.customLimits || {}
+          customLimits: message.customLimits || {},
+          youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
         });
         
         sendResponse({ success: true });

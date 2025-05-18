@@ -16,6 +16,11 @@ export default function App() {
   const [customLimits, setCustomLimits] = useState<Record<string, number>>({});
   const [editingSite, setEditingSite] = useState<string | null>(null);
   const [customLimitInput, setCustomLimitInput] = useState<string>('');
+  // New state for YouTube settings
+  const [youtubeSettings, setYoutubeSettings] = useState<{
+    hideShorts: boolean;
+    hideHomeFeed: boolean;
+  }>({ hideShorts: false, hideHomeFeed: false });
 
   useEffect(() => {
     // Get current active tab to identify the current domain
@@ -47,6 +52,11 @@ export default function App() {
         // Load custom limits if they exist
         if (settings.customLimits) {
           setCustomLimits(settings.customLimits);
+        }
+        
+        // Load YouTube settings if they exist
+        if (settings.youtubeSettings) {
+          setYoutubeSettings(settings.youtubeSettings);
         }
         
         setResetInterval(settings.resetInterval || 0);
@@ -107,6 +117,14 @@ export default function App() {
     setCustomLimitInput(e.target.value);
   };
 
+  // Handle YouTube settings toggle
+  const handleYoutubeSettingToggle = (setting: 'hideShorts' | 'hideHomeFeed') => {
+    setYoutubeSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
+  };
+
   // Save custom limit for site
   const saveCustomLimit = () => {
     if (!editingSite) return;
@@ -123,6 +141,28 @@ export default function App() {
         const updated = { ...prev };
         delete updated[editingSite];
         return updated;
+      });
+    }
+    
+    // Save settings immediately when closing the modal
+    if (isEditingYoutube) {
+      browser.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        maxScrolls,
+        distractingSites,
+        resetInterval,
+        customLimits: !isNaN(limit) && limit > 0 ? 
+          {...customLimits, [editingSite]: limit} : 
+          {...customLimits},
+        youtubeSettings
+      })
+      .then(() => {
+        setSaveStatus('Saved!');
+        setTimeout(() => setSaveStatus(''), 2000);
+      })
+      .catch(error => {
+        console.error('Error saving settings:', error);
+        setSaveStatus('Error saving');
       });
     }
     
@@ -144,7 +184,8 @@ export default function App() {
       maxScrolls: scrollsToSave,
       distractingSites,
       resetInterval,
-      customLimits
+      customLimits,
+      youtubeSettings // Save YouTube settings
     })
       .then(() => {
         setSaveStatus('Saved!');
@@ -228,6 +269,9 @@ export default function App() {
   const getEffectiveLimit = (site: string): number => {
     return customLimits[site] || maxScrolls;
   };
+
+  // Check if the editing site is YouTube
+  const isEditingYoutube = editingSite?.includes('youtube.com') || false;
 
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
@@ -342,7 +386,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Custom limit editing modal */}
+        {/* Custom limit editing modal with YouTube-specific options */}
         {editingSite && (
           <div 
             style={{
@@ -385,6 +429,122 @@ export default function App() {
                   border: '1px solid var(--border-color)'
                 }}
               />
+              
+              {/* YouTube-specific settings */}
+              {isEditingYoutube && (
+                <div style={{marginBottom: '15px'}}>
+                  <h4 style={{margin: '15px 0 10px', borderTop: '1px solid #eee', paddingTop: '15px'}}>Hide Tabs</h4>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                    <label htmlFor="hide-shorts" style={{fontSize: '14px'}}>Hide Shorts</label>
+                    <div 
+                      className="toggle-switch"
+                      onClick={() => handleYoutubeSettingToggle('hideShorts')}
+                      style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '40px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        id="hide-shorts"
+                        type="checkbox"
+                        checked={youtubeSettings.hideShorts}
+                        onChange={() => {}}
+                        style={{
+                          opacity: 0,
+                          width: 0,
+                          height: 0
+                        }}
+                      />
+                      <span 
+                        className="toggle-slider"
+                        style={{
+                          position: 'absolute',
+                          cursor: 'pointer',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: youtubeSettings.hideShorts ? 'var(--primary-color)' : '#ccc',
+                          borderRadius: '34px',
+                          transition: '.4s'
+                        }}
+                      >
+                        <span 
+                          style={{
+                            position: 'absolute',
+                            content: '""',
+                            height: '16px',
+                            width: '16px',
+                            left: youtubeSettings.hideShorts ? '22px' : '2px',
+                            bottom: '2px',
+                            backgroundColor: 'white',
+                            borderRadius: '50%',
+                            transition: '.4s'
+                          }}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <label htmlFor="hide-home-feed" style={{fontSize: '14px'}}>Hide Home Feed<br/>and Redirect to Subscriptions</label>
+                    <div 
+                      className="toggle-switch"
+                      onClick={() => handleYoutubeSettingToggle('hideHomeFeed')}
+                      style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '40px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        id="hide-home-feed"
+                        type="checkbox"
+                        checked={youtubeSettings.hideHomeFeed}
+                        onChange={() => {}}
+                        style={{
+                          opacity: 0,
+                          width: 0,
+                          height: 0
+                        }}
+                      />
+                      <span 
+                        className="toggle-slider"
+                        style={{
+                          position: 'absolute',
+                          cursor: 'pointer',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: youtubeSettings.hideHomeFeed ? 'var(--primary-color)' : '#ccc',
+                          borderRadius: '34px',
+                          transition: '.4s'
+                        }}
+                      >
+                        <span 
+                          style={{
+                            position: 'absolute',
+                            content: '""',
+                            height: '16px',
+                            width: '16px',
+                            left: youtubeSettings.hideHomeFeed ? '22px' : '2px',
+                            bottom: '2px',
+                            backgroundColor: 'white',
+                            borderRadius: '50%',
+                            transition: '.4s'
+                          }}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                 <button 
                   onClick={() => setEditingSite(null)} 

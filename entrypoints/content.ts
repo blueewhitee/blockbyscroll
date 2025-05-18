@@ -2,6 +2,7 @@ declare global {
   interface Window {
     _scrollStopObserver: MutationObserver | null;
     _twitterFixInterval: number | null;
+    _youtubeSettingsObserver: MutationObserver | null;
   }
   
   interface HTMLElement {
@@ -22,7 +23,12 @@ export default defineContentScript({
     let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
-    let customLimits: Record<string, number> = {}; // Custom limits per domain
+    let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
+    // YouTube-specific settings
+    let youtubeSettings = {
+      hideShorts: false,
+      hideHomeFeed: false
+    };
     
     // Check if current site is in the distracting sites list
     function isDistractingSite() {
@@ -174,6 +180,92 @@ export default defineContentScript({
         timerUpdateInterval = null;
       }
     }
+
+    // Create and inject the stylesheet for hiding YouTube elements
+    function injectYoutubeStylesheet() {
+      // If not YouTube, don't do anything
+      if (!currentHost.includes('youtube.com')) return;
+
+      const styleId = 'nomoscroll-youtube-styles';
+      
+      // Return if style element already exists
+      if (document.getElementById(styleId)) return;
+      
+      // Create style element
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        /* Hide Shorts section in sidebar (when setting enabled) */
+        ${youtubeSettings.hideShorts ? `
+          /* Sidebar "Shorts" link */
+          ytd-guide-section-renderer a[href="/shorts"],
+          ytd-guide-entry-renderer a[href="/shorts"],
+          ytd-mini-guide-entry-renderer a[href="/shorts"],
+          /* Shorts chips at top of home */
+          ytd-rich-shelf-renderer[is-shorts],
+          ytd-rich-grid-row:has([is-shorts]),
+          ytd-rich-section-renderer:has([is-shorts]),
+          ytd-reel-shelf-renderer,
+          ytd-rich-shelf-renderer:has(yt-formatted-string:contains("Shorts")),
+          ytd-rich-section-renderer:has(yt-formatted-string:contains("Shorts")),
+          /* Shorts carousel */
+          ytd-rich-grid-row:has(ytd-rich-item-renderer:has([href*="/shorts/"])),
+          ytd-grid-video-renderer:has(a[href*="/shorts/"]),
+          ytd-video-renderer:has(a[href*="/shorts/"]),
+          ytd-compact-video-renderer:has(a[href*="/shorts/"]),
+          ytd-compact-radio-renderer:has(a[href*="/shorts/"]),
+          /* Video grid items that are shorts */
+          ytd-rich-item-renderer:has(a[href*="/shorts/"]) {
+            display: none !important;
+          }
+        ` : ''}
+      `;
+      
+      document.head.appendChild(style);
+    }
+
+    // Function to handle YouTube home redirect
+    function handleYoutubeHomeRedirect() {
+      // Only run if we're on YouTube and the setting is enabled
+      if (!currentHost.includes('youtube.com') || !youtubeSettings.hideHomeFeed) return;
+      
+      // Check if we're on the home page or shorts page
+      const path = window.location.pathname;
+      if (path === '/' || path === '/feed/explore' || path === '/shorts/' || path.startsWith('/shorts')) {
+        // Redirect to subscriptions
+        window.location.href = 'https://www.youtube.com/feed/subscriptions';
+      }
+    }
+
+    // Set up observer to monitor YouTube DOM changes for persistent hiding
+    function setupYoutubeObserver() {
+      // Only run on YouTube
+      if (!currentHost.includes('youtube.com')) return;
+      
+      // Clean up any existing observer
+      if (window._youtubeSettingsObserver) {
+        window._youtubeSettingsObserver.disconnect();
+        window._youtubeSettingsObserver = null;
+      }
+      
+      // If neither setting is enabled, don't need an observer
+      if (!youtubeSettings.hideShorts) return;
+      
+      // Create a new observer to handle dynamically loaded content
+      const observer = new MutationObserver(() => {
+        // Re-inject the stylesheet to ensure newly loaded content is hidden
+        injectYoutubeStylesheet();
+      });
+      
+      // Start observing
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Store the observer for cleanup
+      window._youtubeSettingsObserver = observer;
+    }
     
     // Get settings from storage
     async function getSettings() {
@@ -183,7 +275,8 @@ export default defineContentScript({
         distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Fallback
         resetInterval: 0,
         lastResetTime: Date.now(),
-        customLimits: {} // Custom scroll limits per domain
+        customLimits: {}, // Custom scroll limits per domain
+        youtubeSettings: { hideShorts: false, hideHomeFeed: false } // YouTube-specific settings
       });
       
       maxScrolls = result.maxScrolls;
@@ -191,6 +284,7 @@ export default defineContentScript({
       resetInterval = result.resetInterval;
       lastResetTime = result.lastResetTime;
       customLimits = result.customLimits;
+      youtubeSettings = result.youtubeSettings;
       
       // Only proceed if current site is in the distracting sites list
       if (!isDistractingSite()) {
@@ -227,6 +321,14 @@ export default defineContentScript({
       // Start timer updates immediately if reset interval is enabled
       if (resetInterval > 0) {
         startTimerUpdates();
+      }
+      
+      // Apply YouTube-specific features if on YouTube
+      if (currentHost.includes('youtube.com')) {
+        console.log('Applying YouTube-specific settings:', youtubeSettings);
+        injectYoutubeStylesheet();
+        setupYoutubeObserver();
+        handleYoutubeHomeRedirect();
       }
       
       // Periodically sync scroll count with storage to prevent inconsistencies
@@ -370,6 +472,9 @@ export default defineContentScript({
           if (isBlocked) return;
           
           const currentUrl = window.location.href;
+          
+          // Apply YouTube-specific features on URL change
+          handleYoutubeHomeRedirect();
           
           // Check if this is a YouTube Shorts page
           const isShortsPage = currentUrl.includes('/shorts/');
@@ -520,6 +625,30 @@ export default defineContentScript({
           customLimits = message.customLimits;
         }
         
+        // Update YouTube settings if provided
+        if (message.youtubeSettings) {
+          const oldSettings = {...youtubeSettings};
+          youtubeSettings = message.youtubeSettings;
+          
+          // If we're on YouTube and settings changed, apply them
+          if (currentHost.includes('youtube.com')) {
+            const settingsChanged = 
+              oldSettings.hideShorts !== youtubeSettings.hideShorts || 
+              oldSettings.hideHomeFeed !== youtubeSettings.hideHomeFeed;
+              
+            if (settingsChanged) {
+              // Re-apply YouTube-specific settings
+              injectYoutubeStylesheet();
+              setupYoutubeObserver();
+              
+              // If home feed setting was enabled, check for redirect
+              if (!oldSettings.hideHomeFeed && youtubeSettings.hideHomeFeed) {
+                handleYoutubeHomeRedirect();
+              }
+            }
+          }
+        }
+        
         updateCounter();
         
         // Check if we should block based on updated settings
@@ -546,10 +675,13 @@ export default defineContentScript({
     // Make sure to clean up when unloading
     window.addEventListener('beforeunload', () => {
       stopTimerUpdates();
+      
+      // Clean up YouTube observer
+      if (window._youtubeSettingsObserver) {
+        window._youtubeSettingsObserver.disconnect();
+        window._youtubeSettingsObserver = null;
+      }
     });
-    
-    // Initialize
-    getSettings();
     
     // Set up fullscreen change detection
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -596,5 +728,8 @@ export default defineContentScript({
         console.error('Error syncing scroll count:', err);
       });
     }
+    
+    // Initialize the extension
+    getSettings();
   },
 });
