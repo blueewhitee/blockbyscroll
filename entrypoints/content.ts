@@ -228,6 +228,9 @@ export default defineContentScript({
       if (resetInterval > 0) {
         startTimerUpdates();
       }
+      
+      // Periodically sync scroll count with storage to prevent inconsistencies
+      setInterval(syncScrollCount, 10000); // Sync every 10 seconds
     }
     
     // Check if we should reset based on time
@@ -239,10 +242,24 @@ export default defineContentScript({
       const resetIntervalMs = resetInterval * 60 * 1000; // Convert minutes to ms
       
       if (timeSinceReset >= resetIntervalMs) {
+        // Reset the scroll count
         scrollCount = 0;
+        // Unblock scrolling if it was blocked
         setScrollBlocking(false);
+        // Update the last reset time
         lastResetTime = now;
-        saveScrollCount();
+        
+        // Use background script to ensure the reset is properly persisted
+        browser.runtime.sendMessage({
+          type: 'RESET_COUNTER'
+        }).then(() => {
+          console.log('Timer-based reset completed and persisted to storage');
+          updateCounter();
+        }).catch(err => {
+          console.error('Error during timer-based reset:', err);
+          // Fallback to direct storage update if the message fails
+          saveScrollCount();
+        });
       }
     }
     
@@ -553,6 +570,31 @@ export default defineContentScript({
         // Show counter again when exiting fullscreen (only if still on a distracting site)
         counter.style.display = 'block';
       }
+    }
+
+    // Add this function to synchronize scroll count with storage
+    function syncScrollCount() {
+      const domain = getMatchingDomain();
+      
+      browser.storage.sync.get(['scrollCounts']).then(result => {
+        const scrollCounts = result.scrollCounts || {};
+        const storedCount = scrollCounts[domain] || 0;
+        
+        // If there's a discrepancy, use the stored value
+        if (scrollCount !== storedCount) {
+          console.log(`Scroll count sync: local=${scrollCount}, stored=${storedCount}`);
+          scrollCount = storedCount;
+          updateCounter();
+          
+          // Check if we should block based on current count
+          const effectiveMax = getEffectiveScrollLimit();
+          if (scrollCount >= effectiveMax) {
+            setScrollBlocking(true);
+          }
+        }
+      }).catch(err => {
+        console.error('Error syncing scroll count:', err);
+      });
     }
   },
 });

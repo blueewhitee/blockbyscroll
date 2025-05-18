@@ -1,6 +1,9 @@
 export default defineBackground(() => {
   console.log('ScrollStop background initialized', { id: browser.runtime.id });
 
+  // Track active scroll count operations to prevent race conditions
+  const pendingOperations = new Map();
+
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
@@ -55,6 +58,10 @@ export default defineBackground(() => {
     
     if (message.type === 'RESET_COUNTER') {
       const resetTime = Date.now();
+      const operationId = `reset_${resetTime}`;
+      
+      // Track this operation
+      pendingOperations.set(operationId, true);
       
       // Get current settings first
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
@@ -67,7 +74,7 @@ export default defineBackground(() => {
         });
         
         // Save the reset counters
-        browser.storage.sync.set({ 
+        return browser.storage.sync.set({ 
           scrollCounts: scrollCounts,
           lastResetTime: resetTime
         }).then(() => {
@@ -77,8 +84,13 @@ export default defineBackground(() => {
             lastResetTime: resetTime
           });
           
+          pendingOperations.delete(operationId);
           sendResponse({ success: true });
         });
+      }).catch(err => {
+        console.error('Error resetting counters:', err);
+        pendingOperations.delete(operationId);
+        sendResponse({ success: false, error: err.message });
       });
       
       return true; // Required for async response
@@ -86,9 +98,14 @@ export default defineBackground(() => {
     
     // New handler for domain-specific scroll increment
     if (message.type === 'INCREMENT_SCROLL' && message.domain) {
+      const domain = message.domain;
+      const operationId = `increment_${domain}_${Date.now()}`;
+      
+      // Track this operation
+      pendingOperations.set(operationId, true);
+      
       browser.storage.sync.get(['scrollCounts', 'distractingSites']).then(result => {
         const scrollCounts = result.scrollCounts || {};
-        const domain = message.domain;
         
         // Initialize the domain counter if it doesn't exist
         if (scrollCounts[domain] === undefined) {
@@ -99,9 +116,14 @@ export default defineBackground(() => {
         scrollCounts[domain] += 1;
         
         // Save the updated counter
-        browser.storage.sync.set({ scrollCounts }).then(() => {
+        return browser.storage.sync.set({ scrollCounts }).then(() => {
+          pendingOperations.delete(operationId);
           sendResponse({ success: true, newCount: scrollCounts[domain] });
         });
+      }).catch(err => {
+        console.error('Error incrementing scroll count:', err);
+        pendingOperations.delete(operationId);
+        sendResponse({ success: false, error: err.message });
       });
       
       return true; // Required for async response
@@ -132,6 +154,12 @@ export default defineBackground(() => {
 
   // Check for time-based reset periodically
   function checkTimeBasedReset() {
+    // Skip if there are pending storage operations to avoid conflicts
+    if (pendingOperations.size > 0) {
+      console.log('Skipping timer reset check due to pending operations');
+      return;
+    }
+    
     console.log('Checking time-based reset...');
     browser.storage.sync.get(['resetInterval', 'lastResetTime', 'scrollCounts', 'distractingSites']).then(result => {
       const resetInterval = result.resetInterval || 0;
@@ -162,6 +190,11 @@ export default defineBackground(() => {
       // If it's time for a reset
       if (timeSinceReset >= resetIntervalMs) {
         console.log('Time for reset! Resetting all counters...');
+        
+        // Create an operation ID for this reset
+        const operationId = `timer_reset_${now}`;
+        pendingOperations.set(operationId, true);
+        
         // Reset all domain-specific counters
         sites.forEach(site => {
           scrollCounts[site] = 0;
@@ -175,6 +208,10 @@ export default defineBackground(() => {
             type: 'RESET_COUNTER',
             lastResetTime: now
           });
+          pendingOperations.delete(operationId);
+        }).catch(err => {
+          console.error('Error during timer-based reset:', err);
+          pendingOperations.delete(operationId);
         });
       }
     });
