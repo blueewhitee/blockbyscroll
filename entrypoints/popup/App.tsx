@@ -545,15 +545,16 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{display: 'flex', justifyContent: 'space-between'}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', gap: '10px'}}>
                 <button 
                   onClick={() => setEditingSite(null)} 
+                  className="reset-button"
                   style={{
                     padding: '8px 12px',
-                    backgroundColor: '#f0f0f0',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    flex: 1
                   }}
                 >
                   Cancel
@@ -566,7 +567,8 @@ export default function App() {
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    flex: 1
                   }}
                 >
                   Save
@@ -589,11 +591,11 @@ export default function App() {
           </button>
         </div>
         <div className="button-group" style={{ marginTop: '10px' }}>
-          <button className="save-button" onClick={handleSave}>
-            Save Settings
-          </button>
           <button className="reset-button" onClick={handleReset}>
             Reset Counter
+          </button>
+          <button className="save-button" onClick={handleSave}>
+            Save Settings
           </button>
         </div>
       </div>
