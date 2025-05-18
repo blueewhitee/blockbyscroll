@@ -21,6 +21,8 @@ export default function App() {
     hideShorts: boolean;
     hideHomeFeed: boolean;
   }>({ hideShorts: false, hideHomeFeed: false });
+  // New state for edit mode
+  const [editMode, setEditMode] = useState<boolean>(false);
 
   useEffect(() => {
     // Get current active tab to identify the current domain
@@ -273,6 +275,11 @@ export default function App() {
   // Check if the editing site is YouTube
   const isEditingYoutube = editingSite?.includes('youtube.com') || false;
 
+  // Toggle edit mode
+  const toggleEditMode = () => {
+    setEditMode(!editMode);
+  };
+
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
   }
@@ -315,7 +322,7 @@ export default function App() {
           onBlur={handleMaxScrollsBlur}
         />
         <p style={{fontSize: '12px', color: 'var(--secondary-text)', margin: '4px 0'}}>
-          Click a site icon to set custom limits. use the ✕ to remove from blocklist.
+          Click a site icon to set custom limits.
         </p>
       </div>
 
@@ -336,15 +343,27 @@ export default function App() {
       </div>
       
       <div className="settings-group">
-        <label>Blocked Sites:</label>
-        <div className="sites-container">
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+          <label>Blocked Sites:</label>
+        </div>
+        <div className="sites-container" style={{ position: 'relative' }}>
           {distractingSites.map((site) => (
             <div 
               key={site} 
               className="site-item" 
               title={customLimits[site] ? `${site} (Custom limit: ${customLimits[site]})` : site}
               onDoubleClick={() => handleRemoveSite(site)}
-              onClick={() => handleEditSite(site)}
+              onClick={(e) => {
+                if (editMode) {
+                  handleRemoveSite(site);
+                } else {
+                  handleEditSite(site);
+                }
+              }}
+              style={{ 
+                position: 'relative',
+                cursor: editMode ? 'pointer' : 'default'
+              }}
             >
               <img src={getFaviconUrl(site)} alt={`${site} favicon`} className="site-favicon" />
               <span className="site-name">{site}</span>
@@ -366,17 +385,39 @@ export default function App() {
                   {customLimits[site]}
                 </span>
               )}
-              <button
-                className="remove-site-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveSite(site);
-                }}
-                aria-label={`Remove ${site}`}
-                title={`Remove ${site}`}
-              >
-                ✕
-              </button>
+              {editMode && (
+                <div
+                  className="site-delete-overlay"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '20px',
+                    fontWeight: 'bold',
+                    backgroundColor: 'transparent',
+                    transition: 'background-color 0.2s',
+                    zIndex: 5,
+                    opacity: 0,
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.85)';
+                    e.currentTarget.style.opacity = '1';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.opacity = '0';
+                  }}
+                >
+                  ✕
+                </div>
+              )}
             </div>
           ))}
           {distractingSites.length === 0 && (
@@ -384,6 +425,25 @@ export default function App() {
               No sites added yet.
             </p>
           )}
+          
+          {/* Edit/Done button positioned within the icon display area */}
+          <button 
+            onClick={toggleEditMode} 
+            className={editMode ? "save-button" : "reset-button"}
+            style={{
+              position: 'absolute',
+              top: '0',
+              right: '0',
+              padding: '4px 8px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              border: 'none',
+              borderRadius: '4px',
+              zIndex: 10
+            }}
+          >
+            {editMode ? 'Done' : 'Edit'}
+          </button>
         </div>
 
         {/* Custom limit editing modal with YouTube-specific options */}
