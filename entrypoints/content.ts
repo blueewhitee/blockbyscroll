@@ -226,12 +226,20 @@ export default defineContentScript({
 
     // Function to handle YouTube home redirect
     function handleYoutubeHomeRedirect() {
-      // Only run if we're on YouTube and the setting is enabled
-      if (!currentHost.includes('youtube.com') || !youtubeSettings.hideHomeFeed) return;
+      // Only proceed if we're on YouTube 
+      if (!currentHost.includes('youtube.com')) return;
       
-      // Check if we're on the home page or shorts page
       const path = window.location.pathname;
-      if (path === '/' || path === '/feed/explore' || path === '/shorts/' || path.startsWith('/shorts')) {
+      
+      // Handle home/explore page redirection - depends on hideHomeFeed setting
+      if (youtubeSettings.hideHomeFeed && (path === '/' || path === '/feed/explore')) {
+        // Redirect to subscriptions
+        window.location.href = 'https://www.youtube.com/feed/subscriptions';
+        return; // Return early to avoid shorts check if we're already redirecting
+      }
+      
+      // Handle shorts redirection - depends on hideShorts setting
+      if (youtubeSettings.hideShorts && (path === '/shorts/' || path.startsWith('/shorts'))) {
         // Redirect to subscriptions
         window.location.href = 'https://www.youtube.com/feed/subscriptions';
       }
@@ -473,8 +481,12 @@ export default defineContentScript({
           
           const currentUrl = window.location.href;
           
-          // Apply YouTube-specific features on URL change
-          handleYoutubeHomeRedirect();
+          // Only apply YouTube-specific features when URL changes
+          if (currentUrl !== lastUrl) {
+            console.log('YouTube URL changed from', lastUrl, 'to', currentUrl);
+            handleYoutubeHomeRedirect();
+            lastUrl = currentUrl;
+          }
           
           // Check if this is a YouTube Shorts page
           const isShortsPage = currentUrl.includes('/shorts/');
@@ -489,11 +501,10 @@ export default defineContentScript({
             incrementScrollCount();
           }
           
-          // Additional increment for Shorts navigation
+          // Additional increment for Shorts navigation (but no URL update since we did it above)
           if (isShortsPage && currentUrl !== lastUrl) {
-            console.log('YouTube Shorts navigation detected', { from: lastUrl, to: currentUrl });
+            console.log('YouTube Shorts navigation detected');
             incrementScrollCount();
-            lastUrl = currentUrl;
           }
           
           // Update last scroll position
@@ -641,10 +652,8 @@ export default defineContentScript({
               injectYoutubeStylesheet();
               setupYoutubeObserver();
               
-              // If home feed setting was enabled, check for redirect
-              if (!oldSettings.hideHomeFeed && youtubeSettings.hideHomeFeed) {
-                handleYoutubeHomeRedirect();
-              }
+              // Apply redirection based on current URL and new settings
+              handleYoutubeHomeRedirect();
             }
           }
         }
