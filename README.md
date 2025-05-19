@@ -12,6 +12,7 @@ NoMoScroll is a browser extension designed to help you maintain healthy scrollin
 - 🔄 Quick reset option when you need to continue browsing
 - ⏱️ Optional auto-reset timer to refresh counters automatically
 - ⚙️ Customizable blocklist to manage which sites are monitored
+- 🚫 Block YouTube Shorts and homepage to reduce distractions and time waste
 
 ## Why NoMoScroll?
 
@@ -54,11 +55,12 @@ NoMoScroll helps you take control of your scrolling habits by giving you a visua
 2. Set your global maximum scroll count
 3. Add websites to your blocklist that you want to monitor (YouTube, X/Twitter, Reddit are added by default)
 4. Optionally set custom scroll limits for specific sites by clicking on their icons
-5. Browse the web as normal - NoMoScroll will only monitor sites on your blocklist
-6. A small counter will appear in the bottom-right corner when on monitored sites
-7. When you reach your limit, an overlay will appear, preventing further scrolling
-8. You can either close the tab or click "Reset and Continue" to reset the counter
-9.  set an auto-reset timer if you want counters to reset automatically after a period of time
+5. Enable YouTube Shorts and homepage blocking to prevent these distracting elements from appearing
+6. Browse the web as normal - NoMoScroll will only monitor sites on your blocklist
+7. A small counter will appear in the bottom-right corner when on monitored sites
+8. When you reach your limit, an overlay will appear, preventing further scrolling
+9. You can either close the tab or click "Reset and Continue" to reset the counter
+10. Set an auto-reset timer if you want counters to reset automatically after a period of time
 
 ## Privacy
 
