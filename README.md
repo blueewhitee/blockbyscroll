@@ -6,7 +6,7 @@ NoMoScroll is a browser extension designed to help you maintain healthy scrollin
 
 ## Features
 
-- 📊 Track your scrolling activity on X/Twitter
+- 📊 Track your scrolling activity 
 - 🛑 Set custom scroll limits to prevent endless doomscrolling
 - 📱 Visual indicators showing your current scroll progress
 - 🔄 Quick reset option when you need to continue browsing
@@ -58,7 +58,7 @@ NoMoScroll helps you take control of your scrolling habits by giving you a visua
 6. A small counter will appear in the bottom-right corner when on monitored sites
 7. When you reach your limit, an overlay will appear, preventing further scrolling
 8. You can either close the tab or click "Reset and Continue" to reset the counter
-9. Optionally set an auto-reset timer if you want counters to reset automatically after a period of time
+9.  set an auto-reset timer if you want counters to reset automatically after a period of time
 
 ## Privacy
 
