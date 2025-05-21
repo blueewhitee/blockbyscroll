@@ -28,6 +28,7 @@ export default defineContentScript({
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
+    let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers
     // YouTube-specific settings
     let youtubeSettings = {
       hideShorts: false,
@@ -66,6 +67,57 @@ export default defineContentScript({
       pointer-events: auto !important;
       touch-action: none;
     `;
+    
+    // Add warning elements to the overlay
+    const overlayIcon = document.createElement('div');
+    overlayIcon.innerHTML = '⚠️';
+    overlayIcon.style.cssText = `
+      font-size: 64px;
+      margin-bottom: 20px;
+    `;
+    
+    const overlayTitle = document.createElement('h2');
+    overlayTitle.textContent = 'Scrolling Limit Reached';
+    overlayTitle.style.cssText = `
+      font-size: 28px;
+      margin: 0 0 15px 0;
+      color: #fff;
+    `;
+    
+    const overlayMessage = document.createElement('p');
+    overlayMessage.textContent = 'You\'ve reached your maximum number of scrolls for this site.';
+    overlayMessage.style.cssText = `
+      font-size: 18px;
+      max-width: 500px;
+      margin: 0 0 10px 0;
+      color: #eee;
+    `;
+    
+    const overlayHint = document.createElement('p');
+    overlayHint.style.cssText = `
+      font-size: 16px;
+      max-width: 500px;
+      margin: 10px 0 0 0;
+      color: #bbb;
+    `;
+    
+    // This will be updated dynamically when timer is set
+    const overlayTimer = document.createElement('div');
+    overlayTimer.id = 'scroll-stop-timer';
+    overlayTimer.style.cssText = `
+      font-size: 16px;
+      margin-top: 20px;
+      padding: 10px 15px;
+      border-radius: 5px;
+      background-color: rgba(255, 255, 255, 0.1);
+    `;
+    
+    // Append all elements to the overlay
+    overlay.appendChild(overlayIcon);
+    overlay.appendChild(overlayTitle);
+    overlay.appendChild(overlayMessage);
+    overlay.appendChild(overlayHint);
+    overlay.appendChild(overlayTimer);
     
     // Create a counter display
     const counter = document.createElement('div');
@@ -142,87 +194,80 @@ export default defineContentScript({
         const duration = message.duration || 25;
         const breakDuration = Math.round(duration / 5) || 5;
         const modalId = 'pomodoro-completion-modal-unique';
-        let modalOverlay = document.getElementById(modalId) as HTMLDivElement | null;
-
-        if (!modalOverlay) {
-          console.log('CONTENT SCRIPT: Creating pomodoro completion modal for the first time.');
-          modalOverlay = document.createElement('div');
-          modalOverlay.id = modalId;
-          modalOverlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.65); display: flex; align-items: center;
-            justify-content: center; z-index: 2147483647; animation: modalFadeIn 0.3s ease-out;
-          `;
-          
-          const modalContent = document.createElement('div');
-          modalContent.style.cssText = `
-            background-color: white; padding: 25px; border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); max-width: 420px; text-align: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          `;
-          
-          modalContent.innerHTML = `
-            <div style="font-size: 48px; margin-bottom: 15px; color: #4caf50;">🎉</div>
-            <h2 style="margin-top: 0; color: #333; font-size: 22px;">Pomodoro Complete!</h2>
-            <p style="color: #555; font-size: 16px; line-height: 1.6;" id="pomodoro-complete-duration-text">
+        
+        // First check if a modal already exists and remove it to avoid conflicts
+        let existingModal = document.getElementById(modalId);
+        if (existingModal) {
+          try {
+            existingModal.remove();
+          } catch (e) {
+            console.error('CONTENT SCRIPT: Error removing existing modal:', e);
+          }
+        }
+        
+        // Simplified modal creation with minimal DOM operations
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = modalId;
+        modalOverlay.style.cssText = `
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background-color: rgba(0, 0, 0, 0.75); display: flex; align-items: center;
+          justify-content: center; z-index: 2147483647;
+        `;
+        
+        // Create a single HTML string to minimize DOM operations
+        modalOverlay.innerHTML = `
+          <div style="background-color: white; padding: 28px; border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); max-width: 460px; text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            
+            <div style="font-size: 54px; margin-bottom: 20px; color: #4caf50;">🎉</div>
+            <h2 style="margin-top: 0; color: #333; font-size: 24px; font-weight: 600;">Pomodoro Complete!</h2>
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 12px 0;">
               Your ${duration} minute pomodoro session is complete. Great work!
             </p>
-            <p style="color: #555; font-size: 16px; line-height: 1.6;" id="pomodoro-complete-break-text">
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
               Would you like to take a ${breakDuration} minute break or stop the timer and reset your scrolls?
             </p>
             <div style="display: flex; justify-content: space-around; gap: 15px; margin-top: 25px;">
-              <button id="pomodoro-stop-btn-modal" style="flex: 1; padding: 12px 20px; background-color: #f44336; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.2s;">Stop & Reset</button>
-              <button id="pomodoro-break-btn-modal" style="flex: 1; padding: 12px 20px; background-color: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.2s;">Start Break (${breakDuration}m)</button>
+              <button id="pomodoro-stop-btn-modal" style="flex: 1; padding: 14px 20px; background-color: #f44336; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Stop & Reset</button>
+              <button id="pomodoro-break-btn-modal" style="flex: 1; padding: 14px 20px; background-color: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Start Break (${breakDuration}m)</button>
             </div>
-          `;
-          
-          modalOverlay.appendChild(modalContent);
-          document.body.appendChild(modalOverlay);
-          console.log('CONTENT SCRIPT: Pomodoro completion modal structure added to DOM.');
-
-          let modalAnimationStyle = document.getElementById('modal-animation-style');
-          if (!modalAnimationStyle) {
-            modalAnimationStyle = document.createElement('style');
-            modalAnimationStyle.id = 'modal-animation-style';
-            modalAnimationStyle.innerHTML = ` @keyframes modalFadeIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } } `;
-            document.head.appendChild(modalAnimationStyle);
-          }
-        } else {
-          console.log('CONTENT SCRIPT: Pomodoro completion modal already exists. Updating content and showing.');
-          // Modal exists, just update its content and ensure it's visible
-          const durationText = modalOverlay.querySelector('#pomodoro-complete-duration-text');
-          if (durationText) durationText.textContent = `Your ${duration} minute pomodoro session is complete. Great work!`;
-          
-          const breakText = modalOverlay.querySelector('#pomodoro-complete-break-text');
-          if (breakText) breakText.textContent = `Would you like to take a ${breakDuration} minute break or stop the timer and reset your scrolls?`;
-          
-          const breakButtonText = modalOverlay.querySelector('#pomodoro-break-btn-modal');
-          if (breakButtonText) breakButtonText.textContent = `Start Break (${breakDuration}m)`;
-        }
-
-        // Always ensure the modal is visible when this prompt is received
-        modalOverlay.style.display = 'flex';
+          </div>
+        `;
         
+        // Add to DOM
+        document.body.appendChild(modalOverlay);
+        console.log('CONTENT SCRIPT: Simplified pomodoro completion modal added to DOM.');
+        
+        // Simplified button handlers with minimal event listeners
         const stopBtn = document.getElementById('pomodoro-stop-btn-modal');
-        if (stopBtn) {
-          console.log('CONTENT SCRIPT: Attaching .onclick to stop button in modal.');
-          stopBtn.onclick = () => {
-            console.log('CONTENT SCRIPT: Stop button in modal clicked.');
-            if (modalOverlay) modalOverlay.style.display = 'none'; // Hide modal
-            browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' }).catch(err => console.error('CONTENT SCRIPT: Error sending stop message:', err));
-            isPomodoroActive = false;
-          };
-        } else console.error('CONTENT SCRIPT: Stop button not found in modal.');
-        
         const breakBtn = document.getElementById('pomodoro-break-btn-modal');
-        if (breakBtn) {
-          console.log('CONTENT SCRIPT: Attaching .onclick to break button in modal.');
-          breakBtn.onclick = () => {
-            console.log('CONTENT SCRIPT: Break button in modal clicked.');
-            if (modalOverlay) modalOverlay.style.display = 'none'; // Hide modal
-            browser.runtime.sendMessage({ type: 'START_BREAK', minutes: breakDuration }).catch(err => console.error('CONTENT SCRIPT: Error sending start break message:', err));
+        
+        if (stopBtn) {
+          stopBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Stop button clicked');
+            modalOverlay.style.display = 'none';
+            
+            browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' })
+              .then(() => {
+                isPomodoroActive = false;
+              })
+              .catch(err => {
+                console.error('CONTENT SCRIPT: Error sending stop message:', err);
+                isPomodoroActive = false;
+              });
           };
-        } else console.error('CONTENT SCRIPT: Break button not found in modal.');
+        }
+        
+        if (breakBtn) {
+          breakBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Break button clicked');
+            modalOverlay.style.display = 'none';
+            
+            browser.runtime.sendMessage({ type: 'START_BREAK', minutes: breakDuration })
+              .catch(err => console.error('CONTENT SCRIPT: Error sending break message:', err));
+          };
+        }
       } else if (message.type === 'BREAK_COMPLETE') {
         // Reset the pomodoro UI when break is complete
         isPomodoroActive = false;
@@ -532,7 +577,8 @@ export default defineContentScript({
         resetInterval: 0,
         lastResetTime: Date.now(),
         customLimits: {}, // Custom scroll limits per domain
-        youtubeSettings: { hideShorts: false, hideHomeFeed: false } // YouTube-specific settings
+        youtubeSettings: { hideShorts: false, hideHomeFeed: false }, // YouTube-specific settings
+        adBlockerCompatMode: true // Enable compatibility mode for ad blockers
       });
       
       maxScrolls = result.maxScrolls;
@@ -541,6 +587,7 @@ export default defineContentScript({
       lastResetTime = result.lastResetTime;
       customLimits = result.customLimits;
       youtubeSettings = result.youtubeSettings;
+      adBlockerCompatMode = result.adBlockerCompatMode;
       
       // Only proceed with scroll blocking features if current site is in the distracting sites list
       if (!isDistractingSite()) {
@@ -686,12 +733,18 @@ export default defineContentScript({
         if (overlayTimer) {
           overlayTimer.textContent = timerText;
         }
+        
+        // Update hint text for reset timer
+        overlayHint.textContent = 'Your scroll limit will reset automatically.';
       } else {
         // If no reset timer is set, update the message accordingly
         const overlayTimer = document.getElementById('scroll-stop-timer');
         if (overlayTimer) {
           overlayTimer.textContent = 'No auto-reset timer configured. Set one in the extension popup.';
         }
+        
+        // Update hint text for manual reset
+        overlayHint.textContent = 'Close this tab or click the extension icon to reset your limit.';
       }
     }
     
@@ -700,66 +753,70 @@ export default defineContentScript({
       let lastScrollTop = window.scrollY;
       let scrollTimeout: any;
       let lastUrl = window.location.href;
+      let lastShortsId = extractShortsId(window.location.href);
       
-      // Set up scroll event listener for regular scrolling
+      // Function to extract shorts ID from URL
+      function extractShortsId(url: string): string {
+        const shortsMatch = url.match(/\/shorts\/([^/?]+)/);
+        return shortsMatch ? shortsMatch[1] : '';
+      }
+      
+      // Implement a throttled scroll counter to avoid too many DOM operations
+      let isThrottled = false;
+      const throttleTime = 250; // ms
+      
+      // Simple scroll event for regular pages
       window.addEventListener('scroll', () => {
-        if (isBlocked) return;
+        if (isBlocked || isThrottled) return;
+        
+        isThrottled = true;
+        setTimeout(() => { isThrottled = false; }, throttleTime);
         
         clearTimeout(scrollTimeout);
-        
         scrollTimeout = window.setTimeout(() => {
           const currentScrollTop = window.scrollY;
           const scrollDelta = Math.abs(currentScrollTop - lastScrollTop);
           
-          // Only count significant scrolls
           if (scrollDelta > 100) {
             incrementScrollCount();
           }
           
           lastScrollTop = currentScrollTop;
         }, 300);
-      });
+      }, { passive: true }); // Add passive flag for better performance
 
-      // Special handling for YouTube Shorts - detect URL changes
+      // Simplified URL change detection for YouTube Shorts
       if (currentHost.includes('youtube.com')) {
-        console.log('YouTube detected - setting up special scroll detection');
-        // Check for URL changes periodically 
+        console.log('YouTube detected - setting up simplified Shorts tracking');
+        
         const urlCheckInterval = setInterval(() => {
           if (isBlocked) return;
           
-          const currentUrl = window.location.href;
-          
-          // Only apply YouTube-specific features when URL changes
-          if (currentUrl !== lastUrl) {
-            console.log('YouTube URL changed from', lastUrl, 'to', currentUrl);
-            handleYoutubeHomeRedirect();
-            lastUrl = currentUrl;
+          try {
+            const currentUrl = window.location.href;
+            
+            // Only handle URL changes - this avoids many DOM operations
+            if (currentUrl !== lastUrl) {
+              // Process YouTube URL change
+              handleYoutubeHomeRedirect();
+              
+              // Special handling for Shorts by ID comparison
+              const currentShortsId = extractShortsId(currentUrl);
+              const previousShortsId = lastShortsId;
+              
+              if (currentShortsId && (currentShortsId !== previousShortsId)) {
+                console.log(`YouTube Shorts navigation: ${previousShortsId || 'none'} → ${currentShortsId}`);
+                incrementScrollCount();
+                lastShortsId = currentShortsId;
+              }
+              
+              lastUrl = currentUrl;
+            }
+          } catch (err) {
+            console.error('Error in YouTube URL check:', err);
           }
-          
-          // Check if this is a YouTube Shorts page
-          const isShortsPage = currentUrl.includes('/shorts/');
-          
-          // For all YouTube pages (not just Shorts), detect regular scrolling  
-          const currentScrollTop = window.scrollY;
-          const scrollDelta = Math.abs(currentScrollTop - lastScrollTop);
-          
-          // Only count significant scrolls
-          if (scrollDelta > 100) {
-            console.log('YouTube scroll detected - delta:', scrollDelta);
-            incrementScrollCount();
-          }
-          
-          // Additional increment for Shorts navigation (but no URL update since we did it above)
-          if (isShortsPage && currentUrl !== lastUrl) {
-            console.log('YouTube Shorts navigation detected');
-            incrementScrollCount();
-          }
-          
-          // Update last scroll position
-          lastScrollTop = currentScrollTop;
-        }, 500); // Check every 500ms
+        }, 500);
 
-        // Clean up interval when page unloads
         window.addEventListener('beforeunload', () => {
           clearInterval(urlCheckInterval);
         });
