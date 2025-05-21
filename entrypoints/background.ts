@@ -11,10 +11,13 @@ export default defineBackground(() => {
   let isPomodoroActive = false;
   // Track pomodoro duration in minutes
   let pomodoroDuration = 0;
+  // Track if pomodoro is in break mode
+  let isBreakActive = false;
   let pomodoroCompletionPromptFallbackTimer = null;
 
   // Reset pomodoro state on startup to prevent it from appearing automatically
   isPomodoroActive = false;
+  isBreakActive = false;
   pomodoroEndTime = 0;
   pomodoroDuration = 0;
   if (pomodoroTimer) {
@@ -101,12 +104,14 @@ export default defineBackground(() => {
         seconds: remainingSeconds
       },
       duration: pomodoroDuration,
-      isActive: isPomodoroActive
+      isActive: isPomodoroActive,
+      isBreak: isBreakActive
     });
     
     // If timer is done, don't schedule another update
     if (remainingTime === 0) {
       isPomodoroActive = false;
+      isBreakActive = false;
       return;
     }
     
@@ -252,10 +257,12 @@ export default defineBackground(() => {
 
         try {
           console.log(`BACKGROUND: Attempting to send POMODORO_COMPLETE_PROMPT for ${pomodoroDuration} min duration.`);
+          
+          // Ensure pomodoro completion is visible on all tabs
           updateAllContentScripts({
             type: 'POMODORO_COMPLETE_PROMPT',
             duration: pomodoroDuration,
-            forceDisplay: true 
+            forceDisplay: true
           });
           
           browser.notifications.create({
@@ -333,6 +340,7 @@ export default defineBackground(() => {
       // Save break end time and status
       pomodoroEndTime = Date.now() + breakTime;
       isPomodoroActive = true;
+      isBreakActive = true;
       pomodoroDuration = breakMinutes;
       
       // Create update message for break
@@ -390,6 +398,7 @@ export default defineBackground(() => {
             
             pomodoroTimer = null;
             isPomodoroActive = false;
+            isBreakActive = false;
           });
         });
       }, breakTime);
@@ -425,6 +434,7 @@ export default defineBackground(() => {
       
       // Update status
       isPomodoroActive = false;
+      isBreakActive = false;
       pomodoroEndTime = 0;
       
       // Notify all tabs that pomodoro is stopped
@@ -455,6 +465,7 @@ export default defineBackground(() => {
       
       // Update status
       isPomodoroActive = false;
+      isBreakActive = false;
       pomodoroEndTime = 0;
       
       // Reset counters
@@ -504,6 +515,7 @@ export default defineBackground(() => {
         if (remainingTime > 0) {
         sendResponse({
           isActive: true,
+          isBreak: isBreakActive,
           remaining: {
             total: remainingTime,
             minutes: remainingMinutes,
