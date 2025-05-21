@@ -220,28 +220,29 @@ export default defineContentScript({
         position: fixed;
         top: 20px;
         right: 20px;
-        background-color: rgba(76, 175, 80, 0.95);
+        background-color: rgba(76, 175, 80, 0.85);
         color: white;
-        padding: 12px 18px;
+        padding: 6px 10px;
         border-radius: 20px;
         font-weight: bold;
         z-index: 2147483647; /* Maximum z-index to ensure visibility */
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         display: none;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
         cursor: pointer;
         transition: all 0.2s ease;
-        border: 2px solid rgba(255, 255, 255, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.3);
         animation: pomodoroFadeIn 0.5s ease-in-out;
+        font-size: 12px;
       `;
       
       // Add keyframes for fade-in animation
       const style = document.createElement('style');
       style.innerHTML = `
         @keyframes pomodoroFadeIn {
-          0% { opacity: 0; transform: translateY(-20px); }
+          0% { opacity: 0; transform: translateY(-10px); }
           100% { opacity: 1; transform: translateY(0); }
         }
       `;
@@ -249,11 +250,9 @@ export default defineContentScript({
       
       pomodoroOverlay.innerHTML = `
         <div style="display: flex; align-items: center;">
-          <div style="margin-right: 10px; font-size: 20px;">🍅</div>
-          <div>
-            <div id="pomodoro-time" style="font-size: 18px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.3);">00:00/00:00</div>
-          </div>
-          <div style="margin-left: 10px; font-size: 16px; opacity: 0.8;">✕</div>
+          <div style="margin-right: 5px; font-size: 14px;">🍅</div>
+          <div id="pomodoro-time" style="font-size: 12px; font-weight: bold;">00:00/00:00</div>
+          <div style="margin-left: 5px; font-size: 10px; opacity: 0.8;">✕</div>
         </div>
       `;
       
