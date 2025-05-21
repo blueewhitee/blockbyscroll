@@ -450,8 +450,6 @@ export default defineContentScript({
       pomodoroOverlay.id = 'pomodoro-timer-overlay';
       pomodoroOverlay.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
         background-color: rgba(76, 175, 80, 0.85);
         color: white;
         padding: 6px 10px;
@@ -469,6 +467,33 @@ export default defineContentScript({
         animation: pomodoroFadeIn 0.5s ease-in-out;
         font-size: 12px;
       `;
+      
+      const isLocalPdf = window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf');
+
+      if (isLocalPdf) {
+        pomodoroOverlay.style.bottom = '20px';
+        pomodoroOverlay.style.right = '20px';
+        // Animate from bottom
+        pomodoroOverlay.animate([
+          { transform: 'translateY(30px)', opacity: 0 },
+          { transform: 'translateY(0)', opacity: 1 }
+        ], {
+          duration: 300,
+          easing: 'ease-out'
+        });
+      } else {
+        pomodoroOverlay.style.top = '20px';
+        pomodoroOverlay.style.right = '20px';
+        // Original animation from top
+        pomodoroOverlay.animate([
+          { transform: 'translateY(-30px)', opacity: 0 },
+          { transform: 'translateY(0)', opacity: 1 }
+        ], {
+          duration: 300,
+          easing: 'ease-out'
+        });
+      }
+      pomodoroOverlay.style.opacity = '1'; // Set opacity to 1 after animation setup
       
       // Add keyframes for fade-in animation
       let pomodoroStyle = document.getElementById('pomodoro-animation-style');
