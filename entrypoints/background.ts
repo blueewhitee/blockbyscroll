@@ -11,6 +11,7 @@ export default defineBackground(() => {
   let isPomodoroActive = false;
   // Track pomodoro duration in minutes
   let pomodoroDuration = 0;
+  let pomodoroCompletionPromptFallbackTimer = null;
 
   // Reset pomodoro state on startup to prevent it from appearing automatically
   isPomodoroActive = false;
@@ -245,84 +246,57 @@ export default defineBackground(() => {
       
       // Set new pomodoro timer
       pomodoroTimer = setTimeout(() => {
-        // When pomodoro timer is done
-        console.log('Pomodoro timer completed!');
+        console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
         pomodoroTimer = null;
-        
-        // Save that pomodoro is no longer active
-        isPomodoroActive = false;
-        
-        // Instead of relying on messaging, which seems unreliable for this critical feature,
-        // we'll open a special completion page that offers the break option
+        // isPomodoroActive will be set to false by START_BREAK, STOP_POMODORO_AND_RESET, or the fallback.
+
         try {
-          // Define a URL with parameters for the popup to use
-          const params = new URLSearchParams({
-            action: 'pomodoro_complete',
-            duration: pomodoroDuration.toString(),
-            completedAt: Date.now().toString()
-          }).toString();
-          
-          // Open popup window with completion dialog
-          browser.windows.create({
-            url: browser.runtime.getURL(`popup/index.html?${params}`),
-            type: 'popup',
-            width: 400,
-            height: 300
-          }).then(popupWindow => {
-            console.log('Opened pomodoro completion popup window', popupWindow);
+          console.log(`BACKGROUND: Attempting to send POMODORO_COMPLETE_PROMPT for ${pomodoroDuration} min duration.`);
+          updateAllContentScripts({
+            type: 'POMODORO_COMPLETE_PROMPT',
+            duration: pomodoroDuration,
+            forceDisplay: true 
           });
           
-          // Also try a standard notification to alert the user
           browser.notifications.create({
             type: 'basic',
             iconUrl: browser.runtime.getURL('icon/128.jpg'),
             title: 'Pomodoro Complete!',
-            message: `Your ${minutes} minute pomodoro session is complete. Check the popup to start a break or stop the timer.`
+            message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
           });
-          
-          // Also try to notify all content scripts anyway as backup
-          browser.tabs.query({}).then(tabs => {
-            const promptMessage = {
-              type: 'POMODORO_COMPLETE_PROMPT',
-              duration: pomodoroDuration,
-              forceDisplay: true
-            };
-            
-            // Send message to each tab individually
-            for (const tab of tabs) {
-              if (tab.id) {
-                browser.tabs.sendMessage(tab.id, promptMessage).catch(() => {
-                  // This error is expected for tabs without our content script
+          console.log('BACKGROUND: POMODORO_COMPLETE_PROMPT sent and notification created.');
+
+          // Start a fallback timer. If no response from content script (modal interaction)
+          // within a certain period, open the popup as a fallback.
+          if (pomodoroCompletionPromptFallbackTimer) {
+            clearTimeout(pomodoroCompletionPromptFallbackTimer);
+          }
+          pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
+            console.log('BACKGROUND: Fallback timer expired. No interaction from in-page prompt detected.');
+            // Check if pomodoro is still considered active (i.e., user hasn't chosen to stop/break via a working modal)
+            // This requires isPomodoroActive to be reliably set by START_BREAK/STOP_POMODORO_AND_RESET
+            if (isPomodoroActive || pomodoroEndTime <= Date.now()) { // If timer effectively ended or was never reset by choice
+                console.log('BACKGROUND: Opening popup as fallback for pomodoro completion choice.');
+                const params = new URLSearchParams({
+                    action: 'pomodoro_complete',
+                    duration: pomodoroDuration.toString(),
+                    completedAt: Date.now().toString()
+                }).toString();
+                browser.windows.create({
+                    url: browser.runtime.getURL(`popup/index.html?${params}`),
+                    type: 'popup',
+                    width: 420, // Slightly wider for better text fit
+                    height: 350 // Slightly taller for better text fit
                 });
-              }
+                // After triggering fallback, ensure main pomodoro state is reset if it wasn't by user choice
+                isPomodoroActive = false;
             }
-          });
+          }, 15000); // 15-second fallback timer
+
         } catch (err) {
-          console.error('Error handling pomodoro completion:', err);
-          
-          // Fallback: just stop the pomodoro and reset counters
-          browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-            const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
-            const scrollCounts = result.scrollCounts || {};
-            const resetTime = Date.now();
-            
-            // Reset all domain-specific counters
-            sites.forEach(site => {
-              scrollCounts[site] = 0;
-            });
-            
-            // Save the reset counters
-            browser.storage.sync.set({ 
-              scrollCounts: scrollCounts,
-              lastResetTime: resetTime
-            }).then(() => {
-              // Notify content script to reset counter
-              updateAllContentScripts({ 
-                type: 'POMODORO_COMPLETE',
-                lastResetTime: resetTime
-              });
-            });
-          });
+          console.error('BACKGROUND: Error sending POMODORO_COMPLETE_PROMPT or creating notification:', err);
+          isPomodoroActive = false; 
+          updateAllContentScripts({ type: 'POMODORO_UPDATE', isActive: false, reason: 'completion_prompt_error' });
         }
       }, pomodoroTime);
       
@@ -431,6 +405,12 @@ export default defineBackground(() => {
       // Start sending updates to content scripts
       updatePomodoroStatus();
       
+      if (pomodoroCompletionPromptFallbackTimer) {
+        clearTimeout(pomodoroCompletionPromptFallbackTimer);
+        pomodoroCompletionPromptFallbackTimer = null;
+        console.log('BACKGROUND: Cleared completion prompt fallback timer due to START_BREAK.');
+      }
+      
       sendResponse({ success: true });
       return true; // Required for async response
     }
@@ -499,6 +479,12 @@ export default defineBackground(() => {
             isActive: false,
             lastResetTime: resetTime
           });
+          
+          if (pomodoroCompletionPromptFallbackTimer) {
+            clearTimeout(pomodoroCompletionPromptFallbackTimer);
+            pomodoroCompletionPromptFallbackTimer = null;
+            console.log('BACKGROUND: Cleared completion prompt fallback timer due to STOP_POMODORO_AND_RESET.');
+          }
           
           sendResponse({ success: true });
         });

@@ -87,158 +87,142 @@ export default defineContentScript({
     
     // Add listener for messages from the background script
     browser.runtime.onMessage.addListener((message) => {
-      console.log('Content script received message:', message);
+      console.log('CONTENT SCRIPT: Received message:', JSON.stringify(message));
       
       if (message.type === 'POMODORO_UPDATE') {
+        console.log('CONTENT SCRIPT: POMODORO_UPDATE received. isActive:', message.isActive, 'Force display:', message.forceDisplay);
         if (message.isActive) {
-          console.log('Pomodoro update received, activating timer display');
           isPomodoroActive = true;
           pomodoroRemainingMinutes = message.remaining.minutes;
           pomodoroRemainingSeconds = message.remaining.seconds;
           pomodoroDuration = message.duration;
-          
-          // Calculate and store the end time
           const remainingMs = (message.remaining.minutes * 60 + message.remaining.seconds) * 1000;
           pomodoroEndTime = Date.now() + remainingMs;
           
-          // Make sure the overlay exists
           if (!pomodoroOverlay || !document.body.contains(pomodoroOverlay)) {
-            console.log('Creating pomodoro overlay as it does not exist');
+            console.log('CONTENT SCRIPT: Pomodoro overlay does not exist or not in DOM. Creating...');
             createPomodoroOverlay();
           } else {
-            console.log('Pomodoro overlay already exists');
+            console.log('CONTENT SCRIPT: Pomodoro overlay already exists.');
           }
           
-          // Update the display immediately
           updatePomodoroDisplay(message.remaining.minutes, message.remaining.seconds, message.duration, message.isBreak);
           
-          // Force display of the overlay
-          console.log('Setting pomodoro overlay display to block');
-          pomodoroOverlay.style.display = 'block';
-          
-          // Change color if it's a break
-          if (message.isBreak) {
-            console.log('Setting break styling');
-            pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)'; // Blue for breaks
-            const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-            if (iconElement) {
-              iconElement.textContent = '☕'; // Coffee icon for breaks
-            }
-          } else {
-            console.log('Setting regular pomodoro styling');
-            pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)'; // Green for focus
-            const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-            if (iconElement) {
-              iconElement.textContent = '🍅'; // Tomato icon for focus
-            }
+          if (message.forceDisplay || isPomodoroActive) {
+            console.log('CONTENT SCRIPT: Setting pomodoro overlay display to block.');
+            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block'; // Null check
           }
           
-          // Start the local countdown
+          if (pomodoroOverlay) { // Null check for styling
+            if (message.isBreak) {
+              console.log('CONTENT SCRIPT: Setting break styling.');
+              pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
+              const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
+              if (iconElement) iconElement.textContent = '☕';
+            } else {
+              console.log('CONTENT SCRIPT: Setting regular pomodoro styling.');
+              pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
+              const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
+              if (iconElement) iconElement.textContent = '🍅';
+            }
+          }
           startLocalPomodoroUpdate();
         } else {
+          console.log('CONTENT SCRIPT: POMODORO_UPDATE received: inactive.');
           isPomodoroActive = false;
-          if (pomodoroOverlay) {
-            pomodoroOverlay.style.display = 'none';
-          }
+          if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
           stopLocalPomodoroUpdate();
         }
       } else if (message.type === 'POMODORO_COMPLETE_PROMPT') {
-        console.log('Received pomodoro complete prompt');
+        console.log('CONTENT SCRIPT: POMODORO_COMPLETE_PROMPT received. Duration:', message.duration);
         
-        // Stop the local timer
+        if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
         stopLocalPomodoroUpdate();
         
-        // Show an alert asking if the user wants to take a break
         const duration = message.duration || 25;
-        const breakDuration = Math.round(duration / 5) || 5; // Rule of thumb: break is 1/5 of work time
+        const breakDuration = Math.round(duration / 5) || 5;
+        const modalId = 'pomodoro-completion-modal-unique';
+        let modalOverlay = document.getElementById(modalId) as HTMLDivElement | null;
+
+        if (!modalOverlay) {
+          console.log('CONTENT SCRIPT: Creating pomodoro completion modal for the first time.');
+          modalOverlay = document.createElement('div');
+          modalOverlay.id = modalId;
+          modalOverlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.65); display: flex; align-items: center;
+            justify-content: center; z-index: 2147483647; animation: modalFadeIn 0.3s ease-out;
+          `;
+          
+          const modalContent = document.createElement('div');
+          modalContent.style.cssText = `
+            background-color: white; padding: 25px; border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); max-width: 420px; text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          `;
+          
+          modalContent.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 15px; color: #4caf50;">🎉</div>
+            <h2 style="margin-top: 0; color: #333; font-size: 22px;">Pomodoro Complete!</h2>
+            <p style="color: #555; font-size: 16px; line-height: 1.6;" id="pomodoro-complete-duration-text">
+              Your ${duration} minute pomodoro session is complete. Great work!
+            </p>
+            <p style="color: #555; font-size: 16px; line-height: 1.6;" id="pomodoro-complete-break-text">
+              Would you like to take a ${breakDuration} minute break or stop the timer and reset your scrolls?
+            </p>
+            <div style="display: flex; justify-content: space-around; gap: 15px; margin-top: 25px;">
+              <button id="pomodoro-stop-btn-modal" style="flex: 1; padding: 12px 20px; background-color: #f44336; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.2s;">Stop & Reset</button>
+              <button id="pomodoro-break-btn-modal" style="flex: 1; padding: 12px 20px; background-color: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.2s;">Start Break (${breakDuration}m)</button>
+            </div>
+          `;
+          
+          modalOverlay.appendChild(modalContent);
+          document.body.appendChild(modalOverlay);
+          console.log('CONTENT SCRIPT: Pomodoro completion modal structure added to DOM.');
+
+          let modalAnimationStyle = document.getElementById('modal-animation-style');
+          if (!modalAnimationStyle) {
+            modalAnimationStyle = document.createElement('style');
+            modalAnimationStyle.id = 'modal-animation-style';
+            modalAnimationStyle.innerHTML = ` @keyframes modalFadeIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } } `;
+            document.head.appendChild(modalAnimationStyle);
+          }
+        } else {
+          console.log('CONTENT SCRIPT: Pomodoro completion modal already exists. Updating content and showing.');
+          // Modal exists, just update its content and ensure it's visible
+          const durationText = modalOverlay.querySelector('#pomodoro-complete-duration-text');
+          if (durationText) durationText.textContent = `Your ${duration} minute pomodoro session is complete. Great work!`;
+          
+          const breakText = modalOverlay.querySelector('#pomodoro-complete-break-text');
+          if (breakText) breakText.textContent = `Would you like to take a ${breakDuration} minute break or stop the timer and reset your scrolls?`;
+          
+          const breakButtonText = modalOverlay.querySelector('#pomodoro-break-btn-modal');
+          if (breakButtonText) breakButtonText.textContent = `Start Break (${breakDuration}m)`;
+        }
+
+        // Always ensure the modal is visible when this prompt is received
+        modalOverlay.style.display = 'flex';
         
-        // Create a modal dialog to choose between stopping or taking a break
-        const modalOverlay = document.createElement('div');
-        modalOverlay.id = 'pomodoro-completion-modal';
-        modalOverlay.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 2147483647;
-        `;
-        
-        const modalContent = document.createElement('div');
-        modalContent.style.cssText = `
-          background-color: white;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-          max-width: 400px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        `;
-        
-        modalContent.innerHTML = `
-          <h2 style="margin-top: 0; color: #4caf50;">Pomodoro Complete!</h2>
-          <p>Your ${duration} minute pomodoro session is complete. Great work!</p>
-          <p>Would you like to take a ${breakDuration} minute break or stop the timer?</p>
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button id="pomodoro-stop-btn" style="padding: 8px 16px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Stop</button>
-            <button id="pomodoro-break-btn" style="padding: 8px 16px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer;">Start Break (${breakDuration}m)</button>
-          </div>
-        `;
-        
-        modalOverlay.appendChild(modalContent);
-        document.body.appendChild(modalOverlay);
-        console.log('Added pomodoro completion modal to DOM');
-        
-        // Add event listeners to buttons
-        const stopBtn = document.getElementById('pomodoro-stop-btn');
+        const stopBtn = document.getElementById('pomodoro-stop-btn-modal');
         if (stopBtn) {
-          console.log('Adding event listener to stop button');
-          stopBtn.addEventListener('click', () => {
-            console.log('Stop button clicked');
-            // Remove the modal
-            if (document.body.contains(modalOverlay)) {
-              document.body.removeChild(modalOverlay);
-            }
-            
-            // Hide the overlay
-            if (pomodoroOverlay) {
-              pomodoroOverlay.style.display = 'none';
-            }
-            
-            // Tell background script to stop timer and reset counters
-            console.log('Sending STOP_POMODORO_AND_RESET message');
-            browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' })
-              .catch(err => console.error('Error sending stop message:', err));
-            
+          console.log('CONTENT SCRIPT: Attaching .onclick to stop button in modal.');
+          stopBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Stop button in modal clicked.');
+            if (modalOverlay) modalOverlay.style.display = 'none'; // Hide modal
+            browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' }).catch(err => console.error('CONTENT SCRIPT: Error sending stop message:', err));
             isPomodoroActive = false;
-          });
-        } else {
-          console.error('Stop button element not found in DOM');
-        }
+          };
+        } else console.error('CONTENT SCRIPT: Stop button not found in modal.');
         
-        const breakBtn = document.getElementById('pomodoro-break-btn');
+        const breakBtn = document.getElementById('pomodoro-break-btn-modal');
         if (breakBtn) {
-          console.log('Adding event listener to break button');
-          breakBtn.addEventListener('click', () => {
-            console.log('Break button clicked');
-            // Remove the modal
-            if (document.body.contains(modalOverlay)) {
-              document.body.removeChild(modalOverlay);
-            }
-            
-            // Tell background script to start a break
-            console.log('Sending START_BREAK message');
-            browser.runtime.sendMessage({ 
-              type: 'START_BREAK', 
-              minutes: breakDuration 
-            }).catch(err => console.error('Error sending start break message:', err));
-          });
-        } else {
-          console.error('Break button element not found in DOM');
-        }
+          console.log('CONTENT SCRIPT: Attaching .onclick to break button in modal.');
+          breakBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Break button in modal clicked.');
+            if (modalOverlay) modalOverlay.style.display = 'none'; // Hide modal
+            browser.runtime.sendMessage({ type: 'START_BREAK', minutes: breakDuration }).catch(err => console.error('CONTENT SCRIPT: Error sending start break message:', err));
+          };
+        } else console.error('CONTENT SCRIPT: Break button not found in modal.');
       } else if (message.type === 'BREAK_COMPLETE') {
         // Reset the pomodoro UI when break is complete
         isPomodoroActive = false;

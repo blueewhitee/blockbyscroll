@@ -12,53 +12,18 @@ export default function App() {
   const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com']);
   const [newSite, setNewSite] = useState<string>('');
   const [resetInterval, setResetInterval] = useState<number>(0);
-  // New state for custom limits
   const [customLimits, setCustomLimits] = useState<Record<string, number>>({});
   const [editingSite, setEditingSite] = useState<string | null>(null);
   const [customLimitInput, setCustomLimitInput] = useState<string>('');
-  // New state for YouTube settings
   const [youtubeSettings, setYoutubeSettings] = useState<{
     hideShorts: boolean;
     hideHomeFeed: boolean;
   }>({ hideShorts: false, hideHomeFeed: false });
-  // New state for edit mode
   const [editMode, setEditMode] = useState<boolean>(false);
-  // New state for pomodoro popup
   const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
-  // State for pomodoro completion handling
-  const [isPomodoroComplete, setIsPomodoroComplete] = useState<boolean>(false);
-  const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
 
   useEffect(() => {
-    // Check if this is a pomodoro completion popup
-    const checkForPomodoroCompletion = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const action = urlParams.get('action');
-      if (action === 'pomodoro_complete') {
-        const duration = parseInt(urlParams.get('duration') || '25', 10);
-        setIsPomodoroComplete(true);
-        setCompletedPomodoroDuration(duration);
-        
-        // Set a smaller break duration (usually 1/5 of work duration)
-        const breakDuration = Math.round(duration / 5) || 5;
-        setPomodoroMinutes(breakDuration.toString());
-        
-        // Set window title to alert user
-        document.title = "✅ Pomodoro Complete!";
-        
-        // No need to load other data for this special popup
-        setIsLoading(false);
-        return true;
-      }
-      return false;
-    };
-    
-    // If this is a pomodoro completion popup, don't load settings
-    if (checkForPomodoroCompletion()) {
-      return;
-    }
-    
     // Get current active tab to identify the current domain
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       const activeTab = tabs[0];
@@ -104,31 +69,23 @@ export default function App() {
       });
   }, []);
 
-  // Effect to find and set the current scroll count based on domain
   useEffect(() => {
     if (currentDomain && Object.keys(scrollCounts).length > 0) {
-      // Find the matching domain from our distracting sites
       const matchingDomain = distractingSites.find(site => currentDomain.includes(site));
       
       if (matchingDomain) {
-        // Show the count for this domain
         setCurrentScrolls(scrollCounts[matchingDomain] || 0);
       } else {
-        // Not on a tracked site
         setCurrentScrolls(0);
       }
     }
   }, [currentDomain, scrollCounts, distractingSites]);
 
-  // Effect to sync maxScrollsInput when maxScrolls changes
   useEffect(() => {
-    // This effect ensures that if maxScrolls is changed programmatically
-    // (e.g., on load, or after blur/save validation sets it),
-    // the input field (maxScrollsInput) reflects this validated numeric state.
-    if (maxScrolls.toString() !== maxScrollsInput) { // Only update if actually different
+    if (maxScrolls.toString() !== maxScrollsInput) { 
         setMaxScrollsInput(maxScrolls.toString());
     }
-  }, [maxScrolls]); // CRITICAL: Only depend on maxScrolls
+  }, [maxScrolls]);
 
   const handleMaxScrollsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMaxScrollsInput(e.target.value);
@@ -142,18 +99,15 @@ export default function App() {
     setMaxScrolls(num);
   };
 
-  // Handle edit site by double-clicking on a site icon
   const handleEditSite = (site: string) => {
     setEditingSite(site);
     setCustomLimitInput(customLimits[site]?.toString() || '');
   };
 
-  // Handle custom limit input change
   const handleCustomLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCustomLimitInput(e.target.value);
   };
 
-  // Handle YouTube settings toggle
   const handleYoutubeSettingToggle = (setting: 'hideShorts' | 'hideHomeFeed') => {
     setYoutubeSettings(prev => ({
       ...prev,
@@ -161,18 +115,13 @@ export default function App() {
     }));
   };
 
-  // Save custom limit for site
   const saveCustomLimit = () => {
     if (!editingSite) return;
     
     const limit = parseInt(customLimitInput);
     if (!isNaN(limit) && limit > 0) {
-      setCustomLimits(prev => ({
-        ...prev,
-        [editingSite]: limit
-      }));
+      setCustomLimits(prev => ({ ...prev, [editingSite]: limit }));
     } else if (customLimitInput === '') {
-      // Remove the custom limit if input is empty
       setCustomLimits(prev => {
         const updated = { ...prev };
         delete updated[editingSite];
@@ -180,7 +129,6 @@ export default function App() {
       });
     }
     
-    // Save settings immediately when closing the modal
     if (isEditingYoutube) {
       browser.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
@@ -221,7 +169,7 @@ export default function App() {
       distractingSites,
       resetInterval,
       customLimits,
-      youtubeSettings // Save YouTube settings
+      youtubeSettings 
     })
       .then(() => {
         setSaveStatus('Saved!');
@@ -234,48 +182,35 @@ export default function App() {
   };
 
   const handleReset = () => {
-    // Show pomodoro popup instead of resetting
     setShowPomodoroPopup(true);
   };
 
-  // Start a new pomodoro timer
   const handlePomodoroDone = () => {
     const minutes = parseInt(pomodoroMinutes);
     if (!isNaN(minutes) && minutes > 0) {
       setSaveStatus('Starting pomodoro timer...');
       
-      // Get the currently active tab
       browser.tabs.query({ active: true, currentWindow: true })
         .then(tabs => {
           if (tabs.length === 0) return;
           const activeTab = tabs[0];
           
-          // Start the pomodoro
           return browser.runtime.sendMessage({ 
             type: 'SET_POMODORO', 
             minutes: minutes,
-            sourceTabId: activeTab.id // Send the source tab ID
+            sourceTabId: activeTab.id 
           });
         })
         .then(() => {
           console.log('Pomodoro timer started successfully');
           setSaveStatus(`Pomodoro set for ${minutes} minutes!`);
           
-          // Show a prominent success message
           const successMessage = document.createElement('div');
           successMessage.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(76, 175, 80, 0.95);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            font-weight: bold;
-            z-index: 10000;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: rgba(76, 175, 80, 0.95); color: white; padding: 20px;
+            border-radius: 10px; text-align: center; font-weight: bold;
+            z-index: 10000; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
           `;
           successMessage.innerHTML = `
             <div style="font-size: 48px; margin-bottom: 10px;">🍅</div>
@@ -284,10 +219,8 @@ export default function App() {
           `;
           document.body.appendChild(successMessage);
           
-          // Remove the message after a short delay
           setTimeout(() => {
             document.body.removeChild(successMessage);
-            // Close the popup after showing the message
             window.close();
           }, 1500);
         })
@@ -297,74 +230,6 @@ export default function App() {
         });
     }
     setShowPomodoroPopup(false);
-  };
-
-  // Start a break after pomodoro completion
-  const handleStartBreak = () => {
-    const minutes = parseInt(pomodoroMinutes);
-    if (!isNaN(minutes) && minutes > 0) {
-      setSaveStatus('Starting break...');
-      
-      browser.runtime.sendMessage({ 
-        type: 'START_BREAK', 
-        minutes: minutes
-      })
-      .then(() => {
-        console.log('Break started successfully');
-        setSaveStatus(`Break set for ${minutes} minutes!`);
-        
-        // Show confirmation message
-        const successMessage = document.createElement('div');
-        successMessage.style.cssText = `
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background-color: rgba(33, 150, 243, 0.95);
-          color: white;
-          padding: 20px;
-          border-radius: 10px;
-          text-align: center;
-          font-weight: bold;
-          z-index: 10000;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        `;
-        successMessage.innerHTML = `
-          <div style="font-size: 48px; margin-bottom: 10px;">☕</div>
-          <div style="font-size: 18px; margin-bottom: 5px;">Break Started!</div>
-          <div style="font-size: 16px; opacity: 0.9;">${minutes} minute${minutes !== 1 ? 's' : ''}</div>
-        `;
-        document.body.appendChild(successMessage);
-        
-        setTimeout(() => {
-          document.body.removeChild(successMessage);
-          window.close();
-        }, 1500);
-      })
-      .catch(error => {
-        console.error('Error starting break:', error);
-        setSaveStatus('Error starting break');
-      });
-    }
-  };
-
-  // Stop timer and reset counters
-  const handleStopAndReset = () => {
-    setSaveStatus('Stopping timer...');
-    
-    browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' })
-      .then(() => {
-        console.log('Timer stopped and counters reset');
-        setSaveStatus('Timer stopped!');
-        
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      })
-      .catch(error => {
-        console.error('Error stopping timer:', error);
-        setSaveStatus('Error stopping timer');
-      });
   };
 
   const handleAddSite = () => {
@@ -378,27 +243,18 @@ export default function App() {
 
     if (formattedSite && !distractingSites.includes(formattedSite)) {
       setDistractingSites([...distractingSites, formattedSite]);
-      
-      // Initialize scroll count for new site
-      setScrollCounts(prev => ({
-        ...prev,
-        [formattedSite]: 0
-      }));
-      
+      setScrollCounts(prev => ({ ...prev, [formattedSite]: 0 }));
       setNewSite('');
     }
   };
 
   const handleRemoveSite = (siteToRemove: string) => {
     setDistractingSites(distractingSites.filter(site => site !== siteToRemove));
-    
-    // Remove from scrollCounts and customLimits
     setScrollCounts(prev => {
       const updated = { ...prev };
       delete updated[siteToRemove];
       return updated;
     });
-    
     setCustomLimits(prev => {
       const updated = { ...prev };
       delete updated[siteToRemove];
@@ -414,98 +270,15 @@ export default function App() {
     return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${domain}&size=16`;
   };
 
-  // Get the effective scroll limit for a site (custom or global)
   const getEffectiveLimit = (site: string): number => {
     return customLimits[site] || maxScrolls;
   };
 
-  // Check if the editing site is YouTube
   const isEditingYoutube = editingSite?.includes('youtube.com') || false;
 
-  // Toggle edit mode
   const toggleEditMode = () => {
     setEditMode(!editMode);
   };
-
-  // If we're showing the pomodoro completion dialog
-  if (isPomodoroComplete) {
-    return (
-      <div className="container" style={{ textAlign: 'center' }}>
-        <div style={{ 
-          marginTop: '20px', 
-          marginBottom: '30px', 
-          fontSize: '48px', 
-          color: '#4caf50' 
-        }}>
-          🍅
-        </div>
-        <h1 style={{ marginBottom: '10px', color: '#4caf50' }}>Pomodoro Complete!</h1>
-        <p style={{ marginBottom: '24px' }}>
-          Great work! Your {completedPomodoroDuration} minute pomodoro session is complete.
-        </p>
-        
-        <div style={{ marginBottom: '20px' }}>
-          <label htmlFor="break-minutes" style={{ display: 'block', marginBottom: '8px' }}>
-            Break duration (minutes):
-          </label>
-          <input
-            id="break-minutes"
-            type="number"
-            min="1"
-            max="30"
-            value={pomodoroMinutes}
-            onChange={(e) => setPomodoroMinutes(e.target.value)}
-            style={{
-              padding: '8px',
-              fontSize: '16px',
-              width: '60px',
-              textAlign: 'center',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              marginBottom: '20px'
-            }}
-          />
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-          <button 
-            onClick={handleStopAndReset}
-            style={{
-              flex: 1,
-              padding: '10px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Stop & Reset Counters
-          </button>
-          <button 
-            onClick={handleStartBreak}
-            style={{
-              flex: 1,
-              padding: '10px',
-              backgroundColor: '#2196f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Start Break
-          </button>
-        </div>
-        
-        {saveStatus && (
-          <div style={{ marginTop: '15px', color: '#4caf50', fontWeight: 'bold' }}>
-            {saveStatus}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
@@ -527,11 +300,7 @@ export default function App() {
           <div 
             className="progress-fill" 
             style={{ 
-              width: `${Math.min(100, (currentScrolls / (
-                currentDomain ? 
-                getEffectiveLimit(distractingSites.find(site => currentDomain.includes(site)) || '') : 
-                maxScrolls
-              )) * 100)}%` 
+              width: `${Math.min(100, (currentScrolls / (currentDomain ? getEffectiveLimit(distractingSites.find(site => currentDomain.includes(site)) || '') : maxScrolls)) * 100)}%` 
             }}
           />
         </div>
@@ -653,7 +422,6 @@ export default function App() {
             </p>
           )}
           
-          {/* Edit/Done button positioned within the icon display area */}
           <button 
             onClick={toggleEditMode} 
             className={editMode ? "save-button" : "reset-button"}
@@ -673,7 +441,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Pomodoro Modal */}
         {showPomodoroPopup && (
           <div 
             style={{
@@ -750,7 +517,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Custom limit editing modal with YouTube-specific options */}
         {editingSite && (
           <div 
             style={{
@@ -794,7 +560,6 @@ export default function App() {
                 }}
               />
               
-              {/* YouTube-specific settings */}
               {isEditingYoutube && (
                 <div style={{marginBottom: '15px'}}>
                   <h4 style={{margin: '15px 0 10px', borderTop: '1px solid #eee', paddingTop: '15px'}}>Hide Tabs</h4>
