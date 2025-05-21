@@ -3,6 +3,23 @@ export default defineBackground(() => {
 
   // Track active scroll count operations to prevent race conditions
   const pendingOperations = new Map();
+  // Track pomodoro timer
+  let pomodoroTimer = null;
+  // Track pomodoro end time
+  let pomodoroEndTime = 0;
+  // Track if pomodoro is active
+  let isPomodoroActive = false;
+  // Track pomodoro duration in minutes
+  let pomodoroDuration = 0;
+
+  // Reset pomodoro state on startup to prevent it from appearing automatically
+  isPomodoroActive = false;
+  pomodoroEndTime = 0;
+  pomodoroDuration = 0;
+  if (pomodoroTimer) {
+    clearTimeout(pomodoroTimer);
+    pomodoroTimer = null;
+  }
 
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
@@ -31,6 +48,70 @@ export default defineBackground(() => {
       console.log('ScrollStop: Default settings initialized');
     }
   });
+
+  // Helper function to update all content scripts
+  function updateAllContentScripts(message) {
+    console.log('Sending message to all tabs:', message);
+    
+    // Use a more inclusive approach to notify all tabs
+    browser.tabs.query({}).then(tabs => {
+      console.log(`Found ${tabs.length} tabs to notify`);
+      let notificationPromises = [];
+      
+      for (const tab of tabs) {
+        if (tab.id) {
+          console.log(`Sending message to tab ${tab.id} (${tab.url || 'unknown url'})`);
+          
+          // Add each message sending operation to our promises array
+          const notifyPromise = browser.tabs.sendMessage(tab.id, message)
+            .catch(err => {
+              // Suppress errors - some tabs may not have the content script running
+              console.log(`Notification to tab ${tab.id} failed: ${err.message}`);
+              return false; // Signal that this tab wasn't notified
+            });
+          
+          notificationPromises.push(notifyPromise);
+        }
+      }
+      
+      // Wait for all notifications to complete
+      Promise.allSettled(notificationPromises).then(results => {
+        const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== false).length;
+        console.log(`Successfully notified ${successCount} out of ${tabs.length} tabs`);
+      });
+    });
+  }
+
+  // Check and update pomodoro timer status
+  function updatePomodoroStatus() {
+    if (!isPomodoroActive) return;
+    
+    const now = Date.now();
+    const remainingTime = Math.max(0, pomodoroEndTime - now);
+    const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+    const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+    
+    // Send update to content scripts
+    updateAllContentScripts({
+      type: 'POMODORO_UPDATE',
+      remaining: {
+        total: remainingTime,
+        minutes: remainingMinutes,
+        seconds: remainingSeconds
+      },
+      duration: pomodoroDuration,
+      isActive: isPomodoroActive
+    });
+    
+    // If timer is done, don't schedule another update
+    if (remainingTime === 0) {
+      isPomodoroActive = false;
+      return;
+    }
+    
+    // Schedule next update in 1 second
+    setTimeout(updatePomodoroStatus, 1000);
+  }
 
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -102,6 +183,166 @@ export default defineBackground(() => {
       return true; // Required for async response
     }
     
+    if (message.type === 'SET_POMODORO' && message.minutes) {
+      const minutes = message.minutes;
+      const sourceTabId = message.sourceTabId;
+      
+      console.log(`Starting ${minutes} minute pomodoro timer from tab ${sourceTabId}`);
+      
+      // Clear any existing timer
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      
+      // Convert minutes to milliseconds
+      const pomodoroTime = minutes * 60 * 1000;
+      
+      // Save pomodoro end time and status
+      pomodoroEndTime = Date.now() + pomodoroTime;
+      isPomodoroActive = true;
+      pomodoroDuration = minutes;
+      
+      // Create update message
+      const now = Date.now();
+      const remainingTime = Math.max(0, pomodoroEndTime - now);
+      const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+      const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+      
+      const updateMessage = {
+        type: 'POMODORO_UPDATE',
+        remaining: {
+          total: remainingTime,
+          minutes: remainingMinutes,
+          seconds: remainingSeconds
+        },
+        duration: pomodoroDuration,
+        isActive: true
+      };
+      
+      // If we have a source tab ID, update it first for immediate feedback
+      if (sourceTabId) {
+        console.log(`Sending immediate update to source tab ${sourceTabId}`);
+        browser.tabs.sendMessage(sourceTabId, updateMessage)
+          .catch(err => console.log(`Error sending to source tab: ${err.message}`));
+      }
+      
+      // Then send immediate update to all tabs
+      console.log('Sending immediate pomodoro update to all tabs');
+      updateAllContentScripts(updateMessage);
+      
+      // Set new pomodoro timer
+      pomodoroTimer = setTimeout(() => {
+        // When pomodoro timer is done, reset counters
+        browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
+          const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+          const scrollCounts = result.scrollCounts || {};
+          const resetTime = Date.now();
+          
+          // Reset all domain-specific counters
+          sites.forEach(site => {
+            scrollCounts[site] = 0;
+          });
+          
+          // Save the reset counters
+          browser.storage.sync.set({ 
+            scrollCounts: scrollCounts,
+            lastResetTime: resetTime
+          }).then(() => {
+            // Notify content script to reset counter
+            updateAllContentScripts({ 
+              type: 'POMODORO_COMPLETE',
+              lastResetTime: resetTime
+            });
+            
+            // Show notification when pomodoro is complete
+            browser.notifications.create({
+              type: 'basic',
+              iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+              title: 'Pomodoro Complete!',
+              message: `Your ${minutes} minute pomodoro session is complete. Take a break!`
+            });
+            
+            pomodoroTimer = null;
+            isPomodoroActive = false;
+          });
+        });
+      }, pomodoroTime);
+      
+      // Show notification that pomodoro started
+      browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        title: 'Pomodoro Started',
+        message: `${minutes} minute pomodoro timer started. Stay focused!`
+      });
+      
+      // Start sending regular updates to content scripts
+      updatePomodoroStatus();
+      
+      sendResponse({ success: true });
+      return true; // Required for async response
+    }
+    
+    if (message.type === 'STOP_POMODORO') {
+      // Clear the timer
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      
+      // Update status
+      isPomodoroActive = false;
+      pomodoroEndTime = 0;
+      
+      // Notify all tabs that pomodoro is stopped
+      updateAllContentScripts({
+        type: 'POMODORO_UPDATE',
+        isActive: false
+      });
+      
+      // Show notification
+      browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        title: 'Pomodoro Stopped',
+        message: 'Pomodoro timer has been manually stopped.'
+      });
+      
+      sendResponse({ success: true });
+      return true; // Required for async response
+    }
+    
+    if (message.type === 'GET_POMODORO_STATUS') {
+      if (isPomodoroActive && pomodoroEndTime > Date.now()) {
+        const now = Date.now();
+        const remainingTime = Math.max(0, pomodoroEndTime - now);
+        const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+        const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+        
+        // Only report active if there's actually time remaining
+        if (remainingTime > 0) {
+          sendResponse({
+            isActive: true,
+            remaining: {
+              total: remainingTime,
+              minutes: remainingMinutes,
+              seconds: remainingSeconds
+            },
+            duration: pomodoroDuration
+          });
+          return true;
+        }
+      }
+      
+      // Default to inactive state if any condition fails
+      isPomodoroActive = false;
+      sendResponse({
+        isActive: false
+      });
+      return true; // Required for async response
+    }
+    
     // New handler for domain-specific scroll increment
     if (message.type === 'INCREMENT_SCROLL' && message.domain) {
       const domain = message.domain;
@@ -135,28 +376,6 @@ export default defineBackground(() => {
       return true; // Required for async response
     }
   });
-
-  // Helper function to update all content scripts
-  function updateAllContentScripts(message) {
-    browser.storage.sync.get(['distractingSites']).then(result => {
-      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Fallback
-      
-      // Create URL patterns for each site
-      const urlPatterns = sites.flatMap(site => {
-        // Handle both http and https
-        return [`*://*.${site}/*`];
-      });
-      
-      browser.tabs.query({ url: urlPatterns }).then(tabs => {
-        for (const tab of tabs) {
-          if (tab.id) {
-            browser.tabs.sendMessage(tab.id, message)
-              .catch(err => console.error('Error sending message to tab:', err));
-          }
-        }
-      });
-    });
-  }
 
   // Check for time-based reset periodically
   function checkTimeBasedReset() {
@@ -198,31 +417,28 @@ export default defineBackground(() => {
         console.log('Time for reset! Resetting all counters...');
         
         // Create an operation ID for this reset
-        const operationId = `timer_reset_${now}`;
+        const operationId = `reset_${Date.now()}`;
         pendingOperations.set(operationId, true);
         
-        // Reset all domain-specific counters
+        // Reset all counters
         sites.forEach(site => {
           scrollCounts[site] = 0;
         });
         
+        // Save the reset counters
         browser.storage.sync.set({ 
           scrollCounts: scrollCounts,
-          lastResetTime: now
+          lastResetTime: Date.now()
         }).then(() => {
+          // Notify content script to reset counter
           updateAllContentScripts({ 
             type: 'RESET_COUNTER',
-            lastResetTime: now
+            lastResetTime: Date.now()
           });
-          pendingOperations.delete(operationId);
-        }).catch(err => {
-          console.error('Error during timer-based reset:', err);
+          
           pendingOperations.delete(operationId);
         });
       }
     });
   }
-
-  // Check for time-based reset every minute
-  setInterval(checkTimeBasedReset, 60 * 1000);
 });

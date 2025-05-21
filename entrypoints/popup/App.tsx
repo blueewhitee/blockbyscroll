@@ -23,6 +23,9 @@ export default function App() {
   }>({ hideShorts: false, hideHomeFeed: false });
   // New state for edit mode
   const [editMode, setEditMode] = useState<boolean>(false);
+  // New state for pomodoro popup
+  const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
+  const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
 
   useEffect(() => {
     // Get current active tab to identify the current domain
@@ -200,24 +203,68 @@ export default function App() {
   };
 
   const handleReset = () => {
-    setSaveStatus('Resetting...');
-    browser.runtime.sendMessage({ type: 'RESET_COUNTER' })
-      .then(() => {
-        // Update the local state after reset
-        const resetCounts = { ...scrollCounts };
-        distractingSites.forEach(site => {
-          resetCounts[site] = 0;
+    // Show pomodoro popup instead of resetting
+    setShowPomodoroPopup(true);
+  };
+
+  const handlePomodoroDone = () => {
+    const minutes = parseInt(pomodoroMinutes);
+    if (!isNaN(minutes) && minutes > 0) {
+      setSaveStatus('Starting pomodoro timer...');
+      
+      // Get the currently active tab
+      browser.tabs.query({ active: true, currentWindow: true })
+        .then(tabs => {
+          if (tabs.length === 0) return;
+          const activeTab = tabs[0];
+          
+          // Start the pomodoro
+          return browser.runtime.sendMessage({ 
+            type: 'SET_POMODORO', 
+            minutes: minutes,
+            sourceTabId: activeTab.id // Send the source tab ID
+          });
+        })
+        .then(() => {
+          console.log('Pomodoro timer started successfully');
+          setSaveStatus(`Pomodoro set for ${minutes} minutes!`);
+          
+          // Show a prominent success message
+          const successMessage = document.createElement('div');
+          successMessage.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(76, 175, 80, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: bold;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+          `;
+          successMessage.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 10px;">🍅</div>
+            <div style="font-size: 18px; margin-bottom: 5px;">Pomodoro Timer Started!</div>
+            <div style="font-size: 16px; opacity: 0.9;">${minutes} minute${minutes !== 1 ? 's' : ''}</div>
+          `;
+          document.body.appendChild(successMessage);
+          
+          // Remove the message after a short delay
+          setTimeout(() => {
+            document.body.removeChild(successMessage);
+            // Close the popup after showing the message
+            window.close();
+          }, 1500);
+        })
+        .catch(error => {
+          console.error('Error setting pomodoro:', error);
+          setSaveStatus('Error setting pomodoro');
         });
-        setScrollCounts(resetCounts);
-        setCurrentScrolls(0);
-        
-        setSaveStatus('Counter reset!');
-        setTimeout(() => setSaveStatus(''), 2000);
-      })
-      .catch(error => {
-        console.error('Error resetting counter:', error);
-        setSaveStatus('Error resetting');
-      });
+    }
+    setShowPomodoroPopup(false);
   };
 
   const handleAddSite = () => {
@@ -446,6 +493,83 @@ export default function App() {
           </button>
         </div>
 
+        {/* Pomodoro Modal */}
+        {showPomodoroPopup && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+            }}
+          >
+            <div 
+              style={{
+                backgroundColor: 'white',
+                padding: '15px',
+                borderRadius: '8px',
+                width: '280px',
+                boxShadow: '0 3px 10px rgba(0,0,0,0.3)'
+              }}
+            >
+              <h3 style={{margin: '0 0 10px'}}>Set Pomodoro Timer</h3>
+              <p style={{margin: '0 0 15px', fontSize: '13px'}}>
+                Set your focus time in minutes.
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={pomodoroMinutes}
+                onChange={(e) => setPomodoroMinutes(e.target.value)}
+                placeholder="Enter minutes"
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  marginBottom: '15px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)'
+                }}
+              />
+
+              <div style={{display: 'flex', justifyContent: 'space-between', gap: '10px'}}>
+                <button 
+                  onClick={() => setShowPomodoroPopup(false)} 
+                  className="reset-button"
+                  style={{
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    flex: 1
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handlePomodoroDone}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: 'var(--primary-color)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    flex: 1
+                  }}
+                >
+                  Start
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Custom limit editing modal with YouTube-specific options */}
         {editingSite && (
           <div 
@@ -652,7 +776,7 @@ export default function App() {
         </div>
         <div className="button-group" style={{ marginTop: '10px' }}>
           <button className="reset-button" onClick={handleReset}>
-            Reset Counter
+            Set Pomodoro
           </button>
           <button className="save-button" onClick={handleSave}>
             Save Settings

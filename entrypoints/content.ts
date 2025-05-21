@@ -3,6 +3,10 @@ declare global {
     _scrollStopObserver: MutationObserver | null;
     _twitterFixInterval: number | null;
     _youtubeSettingsObserver: MutationObserver | null;
+    setTimeout(callback: (...args: any[]) => void, ms?: number): number;
+    clearTimeout(timeoutId?: number): void;
+    setInterval(callback: (...args: any[]) => void, ms?: number): number;
+    clearInterval(intervalId?: number): void;
   }
   
   interface HTMLElement {
@@ -29,22 +33,14 @@ export default defineContentScript({
       hideShorts: false,
       hideHomeFeed: false
     };
-    
-    // Check if current site is in the distracting sites list
-    function isDistractingSite() {
-      return distractingSites.some(site => currentHost.includes(site));
-    }
-    
-    // Find the specific domain from the distracting sites list that matches current host
-    function getMatchingDomain() {
-      return distractingSites.find(site => currentHost.includes(site)) || currentHost;
-    }
-    
-    // Get effective scroll limit for current domain
-    function getEffectiveScrollLimit() {
-      const domain = getMatchingDomain();
-      return customLimits[domain] || maxScrolls;
-    }
+    // Pomodoro settings
+    let isPomodoroActive = false;
+    let pomodoroRemainingMinutes = 0;
+    let pomodoroRemainingSeconds = 0;
+    let pomodoroDuration = 0;
+    let pomodoroEndTime = 0;
+    let pomodoroUpdateInterval: ReturnType<typeof globalThis.setInterval> | null = null;
+    let pomodoroOverlay: HTMLElement;
     
     // Create overlay for when scrolling is blocked
     const overlay = document.createElement('div');
@@ -71,17 +67,6 @@ export default defineContentScript({
       touch-action: none;
     `;
     
-    const message = document.createElement('div');
-    message.innerHTML = `
-      <h1>Scroll limit reached</h1>
-      <p>You've reached your scrolling limit for ${currentHost}.</p>
-      <p style="margin-top: 20px; font-size: 16px;">Your scroll counter will reset automatically based on your timer settings.</p>
-      <p id="scroll-stop-timer" style="margin-top: 15px; font-size: 18px; color: #1DA1F2;"></p>
-      <p style="margin-top: 10px; font-size: 14px;">You can adjust your scroll limit and reset timer in the extension popup.</p>
-    `;
-    
-    overlay.appendChild(message);
-    
     // Create a counter display
     const counter = document.createElement('div');
     counter.id = 'scroll-stop-counter';
@@ -100,179 +85,249 @@ export default defineContentScript({
       pointer-events: none;
     `;
     
-    // Event handlers for blocking scroll
-    function preventWheelScroll(e) {
-      if (isBlocked) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    }
-    
-    function preventKeyScroll(e) {
-      // Space, Page Up/Down, End, Home, Up, Down
-      const keys = [32, 33, 34, 35, 36, 38, 40];
-      if (isBlocked && keys.includes(e.keyCode)) {
-        e.preventDefault();
-        return false;
-      }
-    }
-    
-    // Block/unblock scrolling
-    function setScrollBlocking(block) {
-      isBlocked = block;
+    // Add listener for messages from the background script
+    browser.runtime.onMessage.addListener((message) => {
+      console.log('Content script received message:', message);
       
-      if (block) {
-        // Save current scroll position
-        document.body.setAttribute('data-scroll-position', window.scrollY.toString());
-        
-        // Add event listeners to prevent scrolling
-        window.addEventListener('wheel', preventWheelScroll, { passive: false });
-        window.addEventListener('touchmove', preventWheelScroll, { passive: false });
-        window.addEventListener('keydown', preventKeyScroll);
-        
-        // Fix body
-        const scrollY = window.scrollY;
-        document.body.style.position = 'fixed';
-        document.body.style.top = `-${scrollY}px`;
-        document.body.style.width = '100%';
-        document.body.style.overflow = 'hidden';
-        
-        // Show overlay
-        overlay.style.display = 'flex';
-      } else {
-        // Remove event listeners
-        window.removeEventListener('wheel', preventWheelScroll);
-        window.removeEventListener('touchmove', preventWheelScroll);
-        window.removeEventListener('keydown', preventKeyScroll);
-        
-        // Restore body
-        const scrollY = parseInt(document.body.getAttribute('data-scroll-position') || '0', 10);
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, scrollY);
-        
-        // Hide overlay
-        overlay.style.display = 'none';
-      }
-      
-      // Note: We've removed the startTimerUpdates and stopTimerUpdates calls from here
-      // since we now manage the timer independently of blocking status
-    }
-    
-    // Timer update interval reference
-    let timerUpdateInterval = null;
-    
-    function startTimerUpdates() {
-      if (resetInterval > 0 && !timerUpdateInterval) {
-        timerUpdateInterval = setInterval(() => {
-          updateCounter();
-          checkTimeBasedReset();
-        }, 1000);
-      }
-    }
-    
-    function stopTimerUpdates() {
-      if (timerUpdateInterval) {
-        clearInterval(timerUpdateInterval);
-        timerUpdateInterval = null;
-      }
-    }
-
-    // Create and inject the stylesheet for hiding YouTube elements
-    function injectYoutubeStylesheet() {
-      // If not YouTube, don't do anything
-      if (!currentHost.includes('youtube.com')) return;
-
-      const styleId = 'nomoscroll-youtube-styles';
-      
-      // Return if style element already exists
-      if (document.getElementById(styleId)) return;
-      
-      // Create style element
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        /* Hide Shorts section in sidebar (when setting enabled) */
-        ${youtubeSettings.hideShorts ? `
-          /* Sidebar "Shorts" link */
-          ytd-guide-section-renderer a[href="/shorts"],
-          ytd-guide-entry-renderer a[href="/shorts"],
-          ytd-mini-guide-entry-renderer a[href="/shorts"],
-          /* Shorts chips at top of home */
-          ytd-rich-shelf-renderer[is-shorts],
-          ytd-rich-grid-row:has([is-shorts]),
-          ytd-rich-section-renderer:has([is-shorts]),
-          ytd-reel-shelf-renderer,
-          ytd-rich-shelf-renderer:has(yt-formatted-string:contains("Shorts")),
-          ytd-rich-section-renderer:has(yt-formatted-string:contains("Shorts")),
-          /* Shorts carousel */
-          ytd-rich-grid-row:has(ytd-rich-item-renderer:has([href*="/shorts/"])),
-          ytd-grid-video-renderer:has(a[href*="/shorts/"]),
-          ytd-video-renderer:has(a[href*="/shorts/"]),
-          ytd-compact-video-renderer:has(a[href*="/shorts/"]),
-          ytd-compact-radio-renderer:has(a[href*="/shorts/"]),
-          /* Video grid items that are shorts */
-          ytd-rich-item-renderer:has(a[href*="/shorts/"]) {
-            display: none !important;
+      if (message.type === 'POMODORO_UPDATE') {
+        if (message.isActive) {
+          console.log('Pomodoro update received, activating timer display');
+          isPomodoroActive = true;
+          pomodoroRemainingMinutes = message.remaining.minutes;
+          pomodoroRemainingSeconds = message.remaining.seconds;
+          pomodoroDuration = message.duration;
+          
+          // Calculate and store the end time
+          const remainingMs = (message.remaining.minutes * 60 + message.remaining.seconds) * 1000;
+          pomodoroEndTime = Date.now() + remainingMs;
+          
+          // Make sure the overlay exists
+          if (!pomodoroOverlay || !document.body.contains(pomodoroOverlay)) {
+            console.log('Creating pomodoro overlay as it does not exist');
+            createPomodoroOverlay();
           }
-        ` : ''}
+          
+          // Update the display immediately
+          updatePomodoroDisplay(message.remaining.minutes, message.remaining.seconds, message.duration);
+          
+          // Force display of the overlay
+          pomodoroOverlay.style.display = 'block';
+          
+          // Start the local countdown
+          startLocalPomodoroUpdate();
+        } else {
+          isPomodoroActive = false;
+          if (pomodoroOverlay) {
+            pomodoroOverlay.style.display = 'none';
+          }
+          stopLocalPomodoroUpdate();
+        }
+      } else if (message.type === 'POMODORO_COMPLETE') {
+        isPomodoroActive = false;
+        if (pomodoroOverlay) {
+          pomodoroOverlay.style.display = 'none';
+        }
+        stopLocalPomodoroUpdate();
+        
+        // Reset the scroll count if we're on a distracting site
+        if (isDistractingSite()) {
+          scrollCount = 0;
+          lastResetTime = message.lastResetTime;
+          updateCounter();
+          setScrollBlocking(false);
+        }
+      } else if (message.type === 'RESET_COUNTER') {
+        scrollCount = 0;
+        lastResetTime = message.lastResetTime;
+        updateCounter();
+        setScrollBlocking(false);
+      } else if (message.type === 'SETTINGS_UPDATED') {
+        // Update local settings
+        maxScrolls = message.maxScrolls;
+        distractingSites = message.distractingSites;
+        resetInterval = message.resetInterval;
+        customLimits = message.customLimits || {};
+        youtubeSettings = message.youtubeSettings || { hideShorts: false, hideHomeFeed: false };
+        
+        // Apply YouTube-specific settings if needed
+        if (currentHost.includes('youtube.com')) {
+          injectYoutubeStylesheet();
+          setupYoutubeObserver();
+          handleYoutubeHomeRedirect();
+        }
+        
+        // Update the counter
+        updateCounter();
+        
+        // Start/stop timer updates based on new settings
+        if (resetInterval > 0) {
+          startTimerUpdates();
+        } else {
+          stopTimerUpdates();
+        }
+      }
+      
+      // Return true for async message handling
+      return true;
+    });
+    
+    // Check pomodoro status from background script
+    function checkPomodoroStatus() {
+      console.log('Checking pomodoro status...');
+      browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
+        .then(status => {
+          console.log('Got pomodoro status:', status);
+          if (status && status.isActive) {
+            isPomodoroActive = true;
+            pomodoroRemainingMinutes = status.remaining.minutes;
+            pomodoroRemainingSeconds = status.remaining.seconds;
+            pomodoroDuration = status.duration;
+            
+            // Calculate and store the end time
+            const remainingMs = (status.remaining.minutes * 60 + status.remaining.seconds) * 1000;
+            pomodoroEndTime = Date.now() + remainingMs;
+            
+            // Update the display immediately
+            updatePomodoroDisplay(status.remaining.minutes, status.remaining.seconds, status.duration);
+            pomodoroOverlay.style.display = 'block';
+            
+            // Start the local countdown
+            startLocalPomodoroUpdate();
+          } else {
+            isPomodoroActive = false;
+            pomodoroOverlay.style.display = 'none';
+            stopLocalPomodoroUpdate();
+          }
+        })
+        .catch(err => {
+          console.error('Error checking pomodoro status:', err);
+        });
+    }
+    
+    // Create pomodoro timer overlay
+    function createPomodoroOverlay() {
+      console.log('Creating pomodoro overlay element');
+      
+      // First check if it already exists
+      if (pomodoroOverlay && document.body.contains(pomodoroOverlay)) {
+        console.log('Pomodoro overlay already exists');
+        return;
+      }
+      
+      pomodoroOverlay = document.createElement('div');
+      pomodoroOverlay.id = 'pomodoro-timer-overlay';
+      pomodoroOverlay.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: rgba(76, 175, 80, 0.95);
+        color: white;
+        padding: 12px 18px;
+        border-radius: 20px;
+        font-weight: bold;
+        z-index: 2147483647; /* Maximum z-index to ensure visibility */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        display: none;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        animation: pomodoroFadeIn 0.5s ease-in-out;
       `;
       
+      // Add keyframes for fade-in animation
+      const style = document.createElement('style');
+      style.innerHTML = `
+        @keyframes pomodoroFadeIn {
+          0% { opacity: 0; transform: translateY(-20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+      `;
       document.head.appendChild(style);
-    }
-
-    // Function to handle YouTube home redirect
-    function handleYoutubeHomeRedirect() {
-      // Only proceed if we're on YouTube 
-      if (!currentHost.includes('youtube.com')) return;
       
-      const path = window.location.pathname;
+      pomodoroOverlay.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <div style="margin-right: 10px; font-size: 20px;">🍅</div>
+          <div>
+            <div id="pomodoro-time" style="font-size: 18px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.3);">00:00/00:00</div>
+          </div>
+          <div style="margin-left: 10px; font-size: 16px; opacity: 0.8;">✕</div>
+        </div>
+      `;
       
-      // Handle home/explore page redirection - depends on hideHomeFeed setting
-      if (youtubeSettings.hideHomeFeed && (path === '/' || path === '/feed/explore')) {
-        // Redirect to subscriptions
-        window.location.href = 'https://www.youtube.com/feed/subscriptions';
-        return; // Return early to avoid shorts check if we're already redirecting
-      }
-      
-      // Handle shorts redirection - depends on hideShorts setting
-      if (youtubeSettings.hideShorts && (path === '/shorts/' || path.startsWith('/shorts'))) {
-        // Redirect to subscriptions
-        window.location.href = 'https://www.youtube.com/feed/subscriptions';
-      }
-    }
-
-    // Set up observer to monitor YouTube DOM changes for persistent hiding
-    function setupYoutubeObserver() {
-      // Only run on YouTube
-      if (!currentHost.includes('youtube.com')) return;
-      
-      // Clean up any existing observer
-      if (window._youtubeSettingsObserver) {
-        window._youtubeSettingsObserver.disconnect();
-        window._youtubeSettingsObserver = null;
-      }
-      
-      // If neither setting is enabled, don't need an observer
-      if (!youtubeSettings.hideShorts) return;
-      
-      // Create a new observer to handle dynamically loaded content
-      const observer = new MutationObserver(() => {
-        // Re-inject the stylesheet to ensure newly loaded content is hidden
-        injectYoutubeStylesheet();
+      // Add click handler to stop pomodoro
+      pomodoroOverlay.addEventListener('click', () => {
+        // Show a confirmation dialog
+        if (confirm('Stop pomodoro timer?')) {
+          // Stop local timer
+          stopLocalPomodoroUpdate();
+          
+          // Hide the overlay
+          pomodoroOverlay.style.display = 'none';
+          
+          // Tell background script to stop timer
+          browser.runtime.sendMessage({ type: 'STOP_POMODORO' });
+          
+          isPomodoroActive = false;
+        }
       });
       
-      // Start observing
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
+      // Add hover effect
+      pomodoroOverlay.addEventListener('mouseenter', () => {
+        pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)';
+        pomodoroOverlay.style.transform = 'scale(1.05)';
       });
       
-      // Store the observer for cleanup
-      window._youtubeSettingsObserver = observer;
+      pomodoroOverlay.addEventListener('mouseleave', () => {
+        pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.95)';
+        pomodoroOverlay.style.transform = 'scale(1)';
+      });
+
+      // Add to document body
+      document.body.appendChild(pomodoroOverlay);
+      
+      console.log('Pomodoro overlay added to DOM');
+    }
+    
+    // Initialize pomodoro immediately
+    function initializePomodoroFeatures() {
+      console.log('Initializing pomodoro features...');
+      // Create and add the overlay (but keep it hidden until explicitly started)
+      createPomodoroOverlay();
+      
+      // We will only check pomodoro status when explicitly triggered from the popup
+      // The message listener will handle updates when a pomodoro is started
+    }
+    
+    // Execute initialization immediately
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializePomodoroFeatures);
+    } else {
+      initializePomodoroFeatures();
+    }
+    
+    // Also call getSettings immediately
+    getSettings();
+    
+    // Update the pomodoro display
+    function updatePomodoroDisplay(minutes: number, seconds: number, duration: number) {
+      pomodoroRemainingMinutes = minutes;
+      pomodoroRemainingSeconds = seconds;
+      pomodoroDuration = duration;
+      
+      // Format time as MM:SS/MM:00
+      const timeDisplay = document.getElementById('pomodoro-time');
+      if (timeDisplay) {
+        const formattedMinutes = String(minutes).padStart(2, '0');
+        const formattedSeconds = String(seconds).padStart(2, '0');
+        const formattedTotal = String(duration).padStart(2, '0');
+        timeDisplay.textContent = `${formattedMinutes}:${formattedSeconds}/${formattedTotal}:00`;
+      } else {
+        // If the element doesn't exist yet, we might need to recreate the overlay
+        createPomodoroOverlay();
+      }
     }
     
     // Get settings from storage
@@ -294,7 +349,10 @@ export default defineContentScript({
       customLimits = result.customLimits;
       youtubeSettings = result.youtubeSettings;
       
-      // Only proceed if current site is in the distracting sites list
+      // Check pomodoro status on initialization - for all sites
+      checkPomodoroStatus();
+      
+      // Only proceed with other features if current site is in the distracting sites list
       if (!isDistractingSite()) {
         console.log(`ScrollStop not active on ${currentHost} (not in distraction list)`);
         return;
@@ -450,7 +508,7 @@ export default defineContentScript({
     // Detect scrolling
     function setupScrollListener() {
       let lastScrollTop = window.scrollY;
-      let scrollTimeout;
+      let scrollTimeout: any;
       let lastUrl = window.location.href;
       
       // Set up scroll event listener for regular scrolling
@@ -543,8 +601,11 @@ export default defineContentScript({
           const reelContainers = document.querySelectorAll('div[role="dialog"], div[data-visualcompletion="ignore-dynamic"]');
           
           reelContainers.forEach(container => {
-            if (!container._reelsObserved) {
-              container._reelsObserved = true;
+            // Use type assertion to bypass TypeScript check
+            const containerElement = container as HTMLElement & { _reelsObserved?: boolean };
+            
+            if (!containerElement._reelsObserved) {
+              containerElement._reelsObserved = true;
               
               // Set up mutation observer to detect new reels content
               const reelsObserver = new MutationObserver((mutations) => {
@@ -599,91 +660,201 @@ export default defineContentScript({
       }
     }
     
-    // Listen for messages from popup/background
-    browser.runtime.onMessage.addListener((message) => {
-      if (message.type === 'SETTINGS_UPDATED') {
-        maxScrolls = message.maxScrolls;
-        
-        if (message.distractingSites) {
-          distractingSites = message.distractingSites;
-          
-          // If current site is no longer in the list, remove overlay and counter
-          if (!isDistractingSite()) {
-            counter.style.display = 'none';
-            setScrollBlocking(false);
-            stopTimerUpdates(); // Stop timer updates if no longer a distraction site
-            return;
-          } else {
-            counter.style.display = 'block';
+    // Create and inject the stylesheet for hiding YouTube elements
+    function injectYoutubeStylesheet() {
+      // If not YouTube, don't do anything
+      if (!currentHost.includes('youtube.com')) return;
+
+      const styleId = 'nomoscroll-youtube-styles';
+      
+      // Return if style element already exists
+      if (document.getElementById(styleId)) return;
+      
+      // Create style element
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        /* Hide Shorts section in sidebar (when setting enabled) */
+        ${youtubeSettings.hideShorts ? `
+          /* Sidebar "Shorts" link */
+          ytd-guide-section-renderer a[href="/shorts"],
+          ytd-guide-entry-renderer a[href="/shorts"],
+          ytd-mini-guide-entry-renderer a[href="/shorts"],
+          /* Shorts chips at top of home */
+          ytd-rich-shelf-renderer[is-shorts],
+          ytd-rich-grid-row:has([is-shorts]),
+          ytd-rich-section-renderer:has([is-shorts]),
+          ytd-reel-shelf-renderer,
+          ytd-rich-shelf-renderer:has(yt-formatted-string:contains("Shorts")),
+          ytd-rich-section-renderer:has(yt-formatted-string:contains("Shorts")),
+          /* Shorts carousel */
+          ytd-rich-grid-row:has(ytd-rich-item-renderer:has([href*="/shorts/"])),
+          ytd-grid-video-renderer:has(a[href*="/shorts/"]),
+          ytd-video-renderer:has(a[href*="/shorts/"]),
+          ytd-compact-video-renderer:has(a[href*="/shorts/"]),
+          ytd-compact-radio-renderer:has(a[href*="/shorts/"]),
+          /* Video grid items that are shorts */
+          ytd-rich-item-renderer:has(a[href*="/shorts/"]) {
+            display: none !important;
           }
-        }
-        
-        if (message.resetInterval !== undefined) {
-          resetInterval = message.resetInterval;
-          
-          // Update timer interval based on new resetInterval
-          if (resetInterval > 0) {
-            // Restart timer if needed
-            stopTimerUpdates();
-            startTimerUpdates();
-          } else {
-            // Stop timer if interval is disabled
-            stopTimerUpdates();
-          }
-        }
-        
-        if (message.customLimits) {
-          customLimits = message.customLimits;
-        }
-        
-        // Update YouTube settings if provided
-        if (message.youtubeSettings) {
-          const oldSettings = {...youtubeSettings};
-          youtubeSettings = message.youtubeSettings;
-          
-          // If we're on YouTube and settings changed, apply them
-          if (currentHost.includes('youtube.com')) {
-            const settingsChanged = 
-              oldSettings.hideShorts !== youtubeSettings.hideShorts || 
-              oldSettings.hideHomeFeed !== youtubeSettings.hideHomeFeed;
-              
-            if (settingsChanged) {
-              // Re-apply YouTube-specific settings
-              injectYoutubeStylesheet();
-              setupYoutubeObserver();
-              
-              // Apply redirection based on current URL and new settings
-              handleYoutubeHomeRedirect();
-            }
-          }
-        }
-        
-        updateCounter();
-        
-        // Check if we should block based on updated settings
-        const effectiveMax = getEffectiveScrollLimit();
-        if (scrollCount >= effectiveMax && !isBlocked) {
-          setScrollBlocking(true);
-        } else if (scrollCount < effectiveMax && isBlocked) {
-          // If the limit was increased and we're now below it, unblock
-          setScrollBlocking(false);
-        }
-      } else if (message.type === 'RESET_COUNTER') {
-        console.log(`RESET_COUNTER received on ${currentHost}, resetting scrollCount from ${scrollCount} to 0`);
-        scrollCount = 0;
-        setScrollBlocking(false);
-        
-        if (message.lastResetTime) {
-          lastResetTime = message.lastResetTime;
-        }
-        
-        updateCounter();
+        ` : ''}
+      `;
+      
+      document.head.appendChild(style);
+    }
+
+    // Function to handle YouTube home redirect
+    function handleYoutubeHomeRedirect() {
+      // Only proceed if we're on YouTube 
+      if (!currentHost.includes('youtube.com')) return;
+      
+      const path = window.location.pathname;
+      
+      // Handle home/explore page redirection - depends on hideHomeFeed setting
+      if (youtubeSettings.hideHomeFeed && (path === '/' || path === '/feed/explore')) {
+        // Redirect to subscriptions
+        window.location.href = 'https://www.youtube.com/feed/subscriptions';
+        return; // Return early to avoid shorts check if we're already redirecting
       }
-    });
+      
+      // Handle shorts redirection - depends on hideShorts setting
+      if (youtubeSettings.hideShorts && (path === '/shorts/' || path.startsWith('/shorts'))) {
+        // Redirect to subscriptions
+        window.location.href = 'https://www.youtube.com/feed/subscriptions';
+      }
+    }
+
+    // Set up observer to monitor YouTube DOM changes for persistent hiding
+    function setupYoutubeObserver() {
+      // Only run on YouTube
+      if (!currentHost.includes('youtube.com')) return;
+      
+      // Clean up any existing observer
+      if (window._youtubeSettingsObserver) {
+        window._youtubeSettingsObserver.disconnect();
+        window._youtubeSettingsObserver = null;
+      }
+      
+      // If neither setting is enabled, don't need an observer
+      if (!youtubeSettings.hideShorts) return;
+      
+      // Create a new observer to handle dynamically loaded content
+      const observer = new MutationObserver(() => {
+        // Re-inject the stylesheet to ensure newly loaded content is hidden
+        injectYoutubeStylesheet();
+      });
+      
+      // Start observing
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Store the observer for cleanup
+      window._youtubeSettingsObserver = observer;
+    }
+    
+    // Timer update interval reference
+    let timerUpdateInterval: ReturnType<typeof globalThis.setInterval> | null = null;
+    
+    function startTimerUpdates() {
+      if (resetInterval > 0 && !timerUpdateInterval) {
+        timerUpdateInterval = setInterval(() => {
+          updateCounter();
+          checkTimeBasedReset();
+        }, 1000);
+      }
+    }
+    
+    function stopTimerUpdates() {
+      if (timerUpdateInterval) {
+        clearInterval(timerUpdateInterval);
+        timerUpdateInterval = null;
+      }
+    }
+
+    // Check if current site is in the distracting sites list
+    function isDistractingSite() {
+      return distractingSites.some(site => currentHost.includes(site));
+    }
+    
+    // Find the specific domain from the distracting sites list that matches current host
+    function getMatchingDomain() {
+      return distractingSites.find(site => currentHost.includes(site)) || currentHost;
+    }
+    
+    // Get effective scroll limit for current domain
+    function getEffectiveScrollLimit() {
+      const domain = getMatchingDomain();
+      return customLimits[domain] || maxScrolls;
+    }
+    
+    // Block/unblock scrolling
+    function setScrollBlocking(block: boolean) {
+      isBlocked = block;
+      
+      if (block) {
+        // Save current scroll position
+        document.body.setAttribute('data-scroll-position', window.scrollY.toString());
+        
+        // Add event listeners to prevent scrolling
+        window.addEventListener('wheel', preventWheelScroll, { passive: false });
+        window.addEventListener('touchmove', preventWheelScroll, { passive: false });
+        window.addEventListener('keydown', preventKeyScroll);
+        
+        // Fix body
+        const scrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+        
+        // Show overlay
+        overlay.style.display = 'flex';
+      } else {
+        // Remove event listeners
+        window.removeEventListener('wheel', preventWheelScroll);
+        window.removeEventListener('touchmove', preventWheelScroll);
+        window.removeEventListener('keydown', preventKeyScroll);
+        
+        // Restore body
+        const scrollY = parseInt(document.body.getAttribute('data-scroll-position') || '0', 10);
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+        
+        // Hide overlay
+        overlay.style.display = 'none';
+      }
+      
+      // Note: We've removed the startTimerUpdates and stopTimerUpdates calls from here
+      // since we now manage the timer independently of blocking status
+    }
+    
+    // Event handlers for blocking scroll
+    function preventWheelScroll(e: Event) {
+      if (isBlocked) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }
+    
+    function preventKeyScroll(e: KeyboardEvent) {
+      // Space, Page Up/Down, End, Home, Up, Down
+      const keys = [32, 33, 34, 35, 36, 38, 40];
+      if (isBlocked && keys.includes(e.keyCode)) {
+        e.preventDefault();
+        return false;
+      }
+    }
     
     // Make sure to clean up when unloading
     window.addEventListener('beforeunload', () => {
       stopTimerUpdates();
+      stopLocalPomodoroUpdate();
       
       // Clean up YouTube observer
       if (window._youtubeSettingsObserver) {
@@ -699,10 +870,13 @@ export default defineContentScript({
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
     
     function handleFullscreenChange() {
-      const isFullScreen = document.fullscreenElement || 
-                          document.webkitFullscreenElement || 
-                          document.mozFullScreenElement || 
-                          document.msFullscreenElement;
+      // Use standard property with fallbacks for older browsers
+      const isFullScreen = 
+        document.fullscreenElement || 
+        // Using type assertions to avoid TypeScript errors for non-standard properties
+        (document as any).webkitFullscreenElement || 
+        (document as any).mozFullScreenElement || 
+        (document as any).msFullscreenElement;
       
       if (isFullScreen) {
         // Hide counter when in fullscreen
@@ -738,7 +912,46 @@ export default defineContentScript({
       });
     }
     
-    // Initialize the extension
-    getSettings();
+    // Start local pomodoro countdown
+    function startLocalPomodoroUpdate() {
+      // Clear any existing interval first
+      if (pomodoroUpdateInterval) {
+        clearInterval(pomodoroUpdateInterval);
+        pomodoroUpdateInterval = null;
+      }
+      
+      // Only start if pomodoro is active and we have a valid end time
+      if (!isPomodoroActive || pomodoroEndTime <= 0) return;
+      
+      // Set up an interval to update every second
+      pomodoroUpdateInterval = setInterval(() => {
+        const now = Date.now();
+        const remainingTime = Math.max(0, pomodoroEndTime - now);
+        
+        if (remainingTime <= 0) {
+          // Timer has finished, stop the interval
+          clearInterval(pomodoroUpdateInterval!);
+          pomodoroUpdateInterval = null;
+          
+          // We'll let the POMODORO_COMPLETE message handle the cleanup
+          return;
+        }
+        
+        // Calculate minutes and seconds
+        const minutes = Math.floor(remainingTime / (60 * 1000));
+        const seconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+        
+        // Update the display
+        updatePomodoroDisplay(minutes, seconds, pomodoroDuration);
+      }, 1000);
+    }
+    
+    // Stop local pomodoro countdown
+    function stopLocalPomodoroUpdate() {
+      if (pomodoroUpdateInterval) {
+        clearInterval(pomodoroUpdateInterval);
+        pomodoroUpdateInterval = null;
+      }
+    }
   },
 });
