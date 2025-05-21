@@ -15,7 +15,8 @@ declare global {
 }
 
 export default defineContentScript({
-  matches: ['http://*/*', 'https://*/*'], // Match all sites, we'll filter in the main function
+  matches: ['http://*/*', 'https://*/*', 'file://*/*'], // Added file://*/*
+  runAt: 'document_idle', // Added runAt
   main() {
     // Get the current hostname
     const currentHost = window.location.hostname.replace(/^www\./, '');
