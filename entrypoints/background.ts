@@ -2,18 +2,19 @@ export default defineBackground(() => {
   console.log('ScrollStop background initialized', { id: browser.runtime.id });
 
   // Track active scroll count operations to prevent race conditions
-  const pendingOperations = new Map();
+  const pendingOperations = new Map<string, boolean>(); // Added type
   // Track pomodoro timer
-  let pomodoroTimer = null;
+  let pomodoroTimer: NodeJS.Timeout | null = null; // Added type
   // Track pomodoro end time
-  let pomodoroEndTime = 0;
+  let pomodoroEndTime: number = 0; // Added type
   // Track if pomodoro is active
-  let isPomodoroActive = false;
+  let isPomodoroActive: boolean = false; // Added type
   // Track pomodoro duration in minutes
-  let pomodoroDuration = 0;
+  let pomodoroDuration: number = 0; // Added type
   // Track if pomodoro is in break mode
-  let isBreakActive = false;
-  let pomodoroCompletionPromptFallbackTimer = null;
+  let isBreakActive: boolean = false; // Added type
+  let pomodoroCompletionPromptFallbackTimer: NodeJS.Timeout | null = null; // Added type
+  let lastPomodoroWorkDuration: number = 25; // Default to 25 minutes
 
   // Reset pomodoro state on startup to prevent it from appearing automatically
   isPomodoroActive = false;
@@ -28,12 +29,12 @@ export default defineBackground(() => {
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
-      const defaultSites = ['youtube.com', 'x.com', 'reddit.com'];
+      const defaultSites: string[] = ['youtube.com', 'x.com', 'reddit.com']; // Added type
       // Initialize with an empty object for domain-specific scroll counts
-      const scrollCounts = {};
+      const scrollCounts: Record<string, number> = {}; // Added type
       
       // Initialize each default site with 0 scrolls
-      defaultSites.forEach(site => {
+      defaultSites.forEach((site: string) => { // Added type for site
         scrollCounts[site] = 0;
       });
       
@@ -54,7 +55,7 @@ export default defineBackground(() => {
   });
 
   // Helper function to update all content scripts
-  function updateAllContentScripts(message) {
+  function updateAllContentScripts(message: any) { // Added type for message
     console.log('Sending message to all tabs:', message);
     
     // Use a more inclusive approach to notify all tabs
@@ -158,11 +159,11 @@ export default defineBackground(() => {
       
       // Get current settings first
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
-        const scrollCounts = result.scrollCounts || {};
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         
         // Reset all domain-specific counters
-        sites.forEach(site => {
+        sites.forEach((site: string) => { // Added type for site
           scrollCounts[site] = 0;
         });
         
@@ -192,6 +193,12 @@ export default defineBackground(() => {
     if (message.type === 'SET_POMODORO' && message.minutes) {
       const minutes = message.minutes;
       const sourceTabId = message.sourceTabId;
+      
+      // If this is a work session (not a break being set), update lastPomodoroWorkDuration
+      if (!isBreakActive) {
+        lastPomodoroWorkDuration = minutes;
+        console.log(`BACKGROUND: lastPomodoroWorkDuration updated to ${lastPomodoroWorkDuration} minutes.`);
+      }
       
       console.log(`Starting ${minutes} minute pomodoro timer from tab ${sourceTabId}`);
       
@@ -267,7 +274,7 @@ export default defineBackground(() => {
           
           browser.notifications.create({
             type: 'basic',
-            iconUrl: browser.runtime.getURL('icon/128.jpg'),
+            iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
             title: 'Pomodoro Complete!',
             message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
           });
@@ -290,7 +297,7 @@ export default defineBackground(() => {
                     completedAt: Date.now().toString()
                 }).toString();
                 browser.windows.create({
-                    url: browser.runtime.getURL(`popup/index.html?${params}`),
+                    url: browser.runtime.getURL(`/popup/index.html?${params}` as any), // Cast to any to bypass strict WXT typing for query params
                     type: 'popup',
                     width: 420, // Slightly wider for better text fit
                     height: 350 // Slightly taller for better text fit
@@ -310,7 +317,7 @@ export default defineBackground(() => {
       // Show notification that pomodoro started
       browser.notifications.create({
         type: 'basic',
-        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
         title: 'Pomodoro Started',
         message: `${minutes} minute pomodoro timer started. Stay focused!`
       });
@@ -326,7 +333,7 @@ export default defineBackground(() => {
     if (message.type === 'START_BREAK') {
       const breakMinutes = message.minutes || 5; // Default to 5-minute break
       
-      console.log(`Starting ${breakMinutes} minute break`);
+      console.log(`Starting ${breakMinutes} minute break. Previous work duration was ${lastPomodoroWorkDuration}min.`);
       
       // Clear any existing timer
       if (pomodoroTimer) {
@@ -368,12 +375,12 @@ export default defineBackground(() => {
       pomodoroTimer = setTimeout(() => {
         // When break is done
         browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-          const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
-          const scrollCounts = result.scrollCounts || {};
+          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+          const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
           const resetTime = Date.now();
           
           // Reset all domain-specific counters
-          sites.forEach(site => {
+          sites.forEach((site: string) => { // Added type for site
             scrollCounts[site] = 0;
           });
           
@@ -382,22 +389,23 @@ export default defineBackground(() => {
             scrollCounts: scrollCounts,
             lastResetTime: resetTime
           }).then(() => {
-            // Notify content script that break is complete
+            // Notify content script that break is complete and prompt for next action
             updateAllContentScripts({ 
-              type: 'BREAK_COMPLETE',
-              lastResetTime: resetTime
+              type: 'BREAK_COMPLETE_PROMPT', // New message type
+              lastPomodoroWorkDuration: lastPomodoroWorkDuration, // Send the duration of the last work session
+              lastResetTime: resetTime // Still send this for scroll counter UI if needed
             });
             
             // Show notification when break is complete
             browser.notifications.create({
               type: 'basic',
-              iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+              iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
               title: 'Break Complete!',
-              message: `Your ${breakMinutes} minute break is complete. Ready to start another pomodoro?`
+              message: `Your ${breakMinutes} minute break is over. Time to get back to it?`
             });
             
             pomodoroTimer = null;
-            isPomodoroActive = false;
+            isPomodoroActive = false; // Break itself is no longer active
             isBreakActive = false;
           });
         });
@@ -406,7 +414,7 @@ export default defineBackground(() => {
       // Show notification that break started
       browser.notifications.create({
         type: 'basic',
-        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
         title: 'Break Started',
         message: `${breakMinutes} minute break timer started. Relax!`
       });
@@ -446,13 +454,118 @@ export default defineBackground(() => {
       // Show notification
       browser.notifications.create({
         type: 'basic',
-        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
         title: 'Pomodoro Stopped',
         message: 'Pomodoro timer has been manually stopped.'
       });
       
       sendResponse({ success: true });
       return true; // Required for async response
+    }
+
+    // New handler for restarting Pomodoro after break
+    if (message.type === 'RESTART_POMODORO') {
+      const minutes = message.duration;
+      console.log(`BACKGROUND: Restarting Pomodoro for ${minutes} minutes after break.`);
+      
+      // Essentially re-triggering SET_POMODORO logic
+      // Clear any existing timer
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      
+      const pomodoroTime = minutes * 60 * 1000;
+      pomodoroEndTime = Date.now() + pomodoroTime;
+      isPomodoroActive = true;
+      isBreakActive = false; // It's a work session now
+      pomodoroDuration = minutes;
+      // lastPomodoroWorkDuration is already set from the previous work session
+
+      const now = Date.now();
+      const remainingTime = Math.max(0, pomodoroEndTime - now);
+      const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+      const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+      
+      const updateMessage = {
+        type: 'POMODORO_UPDATE',
+        remaining: { total: remainingTime, minutes: remainingMinutes, seconds: remainingSeconds },
+        duration: pomodoroDuration,
+        isActive: true,
+        isBreak: false,
+        forceDisplay: true
+      };
+      updateAllContentScripts(updateMessage);
+      
+      pomodoroTimer = setTimeout(() => {
+        // Pomodoro completion logic (same as in SET_POMODORO)
+        console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
+        pomodoroTimer = null;
+        updateAllContentScripts({
+          type: 'POMODORO_COMPLETE_PROMPT',
+          duration: pomodoroDuration,
+          forceDisplay: true
+        });
+        browser.notifications.create({
+          type: 'basic',
+          iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
+          title: 'Pomodoro Complete!',
+          message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
+        });
+        // Fallback timer logic (copied from SET_POMODORO)
+        if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
+        pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
+          if (isPomodoroActive || pomodoroEndTime <= Date.now()) {
+            const params = new URLSearchParams({
+                action: 'pomodoro_complete',
+                duration: pomodoroDuration.toString(),
+                completedAt: Date.now().toString()
+            }).toString();
+            browser.windows.create({
+                url: browser.runtime.getURL(`/popup/index.html?${params}` as any), // Cast to any to bypass strict WXT typing for query params
+                type: 'popup', width: 420, height: 350
+            });
+            isPomodoroActive = false;
+          }
+        }, 15000);
+      }, pomodoroTime);
+
+      browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('/icon/128.jpg'), // Corrected path
+        title: 'Pomodoro Started',
+        message: `${minutes} minute pomodoro timer started. Stay focused!`
+      });
+      updatePomodoroStatus();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    // New handler for user choosing to stop after break prompt
+    if (message.type === 'USER_ACKNOWLEDGED_BREAK_END') {
+      console.log('BACKGROUND: User acknowledged break end, not starting new Pomodoro.');
+      isPomodoroActive = false;
+      isBreakActive = false;
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      pomodoroEndTime = 0;
+      
+      updateAllContentScripts({
+        type: 'POMODORO_UPDATE',
+        isActive: false,
+        reason: 'user_stopped_after_break'
+      });
+      
+      // Optional: Clear the fallback timer if it was set by POMODORO_COMPLETE_PROMPT
+      if (pomodoroCompletionPromptFallbackTimer) {
+        clearTimeout(pomodoroCompletionPromptFallbackTimer);
+        pomodoroCompletionPromptFallbackTimer = null;
+      }
+      
+      sendResponse({ success: true });
+      return true;
     }
     
     // Handle stopping pomodoro/break and resetting counters
@@ -470,12 +583,12 @@ export default defineBackground(() => {
       
       // Reset counters
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
-        const scrollCounts = result.scrollCounts || {};
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         const resetTime = Date.now();
         
         // Reset all domain-specific counters
-        sites.forEach(site => {
+        sites.forEach((site: string) => { // Added type for site
           scrollCounts[site] = 0;
         });
         
@@ -528,9 +641,15 @@ export default defineBackground(() => {
       }
       
       // Default to inactive state if any condition fails
-      isPomodoroActive = false;
+      if (pomodoroEndTime <= Date.now()) {
+        isPomodoroActive = false;
+        isBreakActive = false; // Also reset break status
+      }
         sendResponse({
-          isActive: false
+          isActive: isPomodoroActive, 
+          isBreak: isBreakActive, // Ensure isBreak is also part of the response
+          remaining: { total: 0, minutes: 0, seconds: 0}, // Provide full structure for inactive state
+          duration: 0
         });
       return true; // Required for async response
     }
@@ -544,7 +663,7 @@ export default defineBackground(() => {
       pendingOperations.set(operationId, true);
       
       browser.storage.sync.get(['scrollCounts', 'distractingSites']).then(result => {
-        const scrollCounts = result.scrollCounts || {};
+        const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         
         // Initialize the domain counter if it doesn't exist
         if (scrollCounts[domain] === undefined) {
@@ -579,10 +698,10 @@ export default defineBackground(() => {
     
     console.log('Checking time-based reset...');
     browser.storage.sync.get(['resetInterval', 'lastResetTime', 'scrollCounts', 'distractingSites']).then(result => {
-      const resetInterval = result.resetInterval || 0;
-      const lastResetTime = result.lastResetTime || Date.now();
-      const scrollCounts = result.scrollCounts || {};
-      const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+      const resetInterval: number = result.resetInterval || 0; // Added type
+      const lastResetTime: number = result.lastResetTime || Date.now(); // Added type
+      const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
+      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
       
       console.log(`Reset check - interval: ${resetInterval}min, scrollCounts:`, scrollCounts);
       
@@ -593,7 +712,7 @@ export default defineBackground(() => {
       }
       
       // Check if any site has scrolls
-      const hasScrolls = sites.some(site => (scrollCounts[site] || 0) > 0);
+      const hasScrolls = sites.some((site: string) => (scrollCounts[site] || 0) > 0); // Added type for site
       if (!hasScrolls) {
         console.log('No sites have scrolls, skipping reset');
         return; // Skip if all counters are already 0
@@ -613,7 +732,7 @@ export default defineBackground(() => {
         pendingOperations.set(operationId, true);
         
         // Reset all counters
-        sites.forEach(site => {
+        sites.forEach((site: string) => { // Added type for site
           scrollCounts[site] = 0;
         });
         

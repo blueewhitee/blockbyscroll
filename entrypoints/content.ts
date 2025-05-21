@@ -141,8 +141,31 @@ export default defineContentScript({
     // Add listener for messages from the background script
     browser.runtime.onMessage.addListener((message) => {
       console.log('CONTENT SCRIPT: Received message:', JSON.stringify(message));
+
+      // Helper function to remove the completion modal
+      const removeCompletionModal = () => {
+        const existingModal = document.getElementById('pomodoro-completion-modal-unique');
+        if (existingModal) {
+          try {
+            existingModal.remove();
+            console.log('CONTENT SCRIPT: Removed pomodoro completion modal.');
+          } catch (e) {
+            console.error('CONTENT SCRIPT: Error removing existing modal:', e);
+          }
+        }
+        const breakOverModal = document.getElementById('pomodoro-break-over-modal-unique');
+        if (breakOverModal) {
+          try {
+            breakOverModal.remove();
+            console.log('CONTENT SCRIPT: Removed break over modal.');
+          } catch (e) {
+            console.error('CONTENT SCRIPT: Error removing break over modal:', e);
+          }
+        }
+      };
       
       if (message.type === 'POMODORO_UPDATE') {
+        removeCompletionModal(); // Remove modal before processing update
         console.log('CONTENT SCRIPT: POMODORO_UPDATE received. isActive:', message.isActive, 'Force display:', message.forceDisplay);
         if (message.isActive) {
           isPomodoroActive = true;
@@ -275,6 +298,7 @@ export default defineContentScript({
           }
         }, 100); // Correctly close setTimeout and add delay
       } else if (message.type === 'BREAK_COMPLETE') {
+        removeCompletionModal(); // Remove modal before processing update
         // Reset the pomodoro UI when break is complete
         isPomodoroActive = false;
         if (pomodoroOverlay) {
@@ -336,7 +360,68 @@ export default defineContentScript({
           updateCounter();
           setScrollBlocking(false);
         }
+      } else if (message.type === 'BREAK_COMPLETE_PROMPT') {
+        console.log('CONTENT SCRIPT: BREAK_COMPLETE_PROMPT received. Last work duration:', message.lastPomodoroWorkDuration);
+        removeCompletionModal(); // Clear any other modals
+        if (pomodoroOverlay) pomodoroOverlay.style.display = 'none'; // Hide timer overlay
+        stopLocalPomodoroUpdate();
+
+        const lastWorkDuration = message.lastPomodoroWorkDuration || 25; // Default if undefined
+        const modalId = 'pomodoro-break-over-modal-unique';
+
+        let existingModal = document.getElementById(modalId);
+        if (existingModal) existingModal.remove();
+
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = modalId;
+        modalOverlay.style.cssText = `
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background-color: rgba(0, 0, 0, 0.75); display: flex; align-items: center;
+          justify-content: center; z-index: 2147483647;
+        `;
+        
+        modalOverlay.innerHTML = `
+          <div style="background-color: white; padding: 28px; border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); max-width: 460px; text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            
+            <div style="font-size: 54px; margin-bottom: 20px; color: #2196f3;">☕</div>
+            <h2 style="margin-top: 0; color: #333; font-size: 24px; font-weight: 600;">Break Over!</h2>
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 12px 0 20px 0;">
+              Your break is finished. Ready to start another ${lastWorkDuration} minute Pomodoro session?
+            </p>
+            <div style="display: flex; justify-content: space-around; gap: 15px; margin-top: 25px;">
+              <button id="pomodoro-stop-after-break-btn" style="flex: 1; padding: 14px 20px; background-color: #f44336; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Stop</button>
+              <button id="pomodoro-start-new-btn" style="flex: 1; padding: 14px 20px; background-color: #4caf50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Start (${lastWorkDuration} min)</button>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modalOverlay);
+        console.log('CONTENT SCRIPT: Pomodoro break over modal added to DOM.');
+
+        const stopBtn = document.getElementById('pomodoro-stop-after-break-btn');
+        const startBtn = document.getElementById('pomodoro-start-new-btn');
+
+        if (stopBtn) {
+          stopBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Stop after break clicked');
+            modalOverlay.remove();
+            browser.runtime.sendMessage({ type: 'USER_ACKNOWLEDGED_BREAK_END' })
+              .catch(err => console.error('CONTENT SCRIPT: Error sending USER_ACKNOWLEDGED_BREAK_END:', err));
+          };
+        }
+
+        if (startBtn) {
+          startBtn.onclick = () => {
+            console.log('CONTENT SCRIPT: Start new Pomodoro after break clicked');
+            modalOverlay.remove();
+            browser.runtime.sendMessage({ type: 'RESTART_POMODORO', duration: lastWorkDuration })
+              .catch(err => console.error('CONTENT SCRIPT: Error sending RESTART_POMODORO:', err));
+          };
+        }
       } else if (message.type === 'POMODORO_STOPPED_AND_RESET') {
+        removeCompletionModal(); // Remove modal before processing update
         // Reset pomodoro UI
         isPomodoroActive = false;
         if (pomodoroOverlay) {
