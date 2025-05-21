@@ -26,8 +26,39 @@ export default function App() {
   // New state for pomodoro popup
   const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
+  // State for pomodoro completion handling
+  const [isPomodoroComplete, setIsPomodoroComplete] = useState<boolean>(false);
+  const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
 
   useEffect(() => {
+    // Check if this is a pomodoro completion popup
+    const checkForPomodoroCompletion = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const action = urlParams.get('action');
+      if (action === 'pomodoro_complete') {
+        const duration = parseInt(urlParams.get('duration') || '25', 10);
+        setIsPomodoroComplete(true);
+        setCompletedPomodoroDuration(duration);
+        
+        // Set a smaller break duration (usually 1/5 of work duration)
+        const breakDuration = Math.round(duration / 5) || 5;
+        setPomodoroMinutes(breakDuration.toString());
+        
+        // Set window title to alert user
+        document.title = "✅ Pomodoro Complete!";
+        
+        // No need to load other data for this special popup
+        setIsLoading(false);
+        return true;
+      }
+      return false;
+    };
+    
+    // If this is a pomodoro completion popup, don't load settings
+    if (checkForPomodoroCompletion()) {
+      return;
+    }
+    
     // Get current active tab to identify the current domain
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       const activeTab = tabs[0];
@@ -207,6 +238,7 @@ export default function App() {
     setShowPomodoroPopup(true);
   };
 
+  // Start a new pomodoro timer
   const handlePomodoroDone = () => {
     const minutes = parseInt(pomodoroMinutes);
     if (!isNaN(minutes) && minutes > 0) {
@@ -265,6 +297,74 @@ export default function App() {
         });
     }
     setShowPomodoroPopup(false);
+  };
+
+  // Start a break after pomodoro completion
+  const handleStartBreak = () => {
+    const minutes = parseInt(pomodoroMinutes);
+    if (!isNaN(minutes) && minutes > 0) {
+      setSaveStatus('Starting break...');
+      
+      browser.runtime.sendMessage({ 
+        type: 'START_BREAK', 
+        minutes: minutes
+      })
+      .then(() => {
+        console.log('Break started successfully');
+        setSaveStatus(`Break set for ${minutes} minutes!`);
+        
+        // Show confirmation message
+        const successMessage = document.createElement('div');
+        successMessage.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background-color: rgba(33, 150, 243, 0.95);
+          color: white;
+          padding: 20px;
+          border-radius: 10px;
+          text-align: center;
+          font-weight: bold;
+          z-index: 10000;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        `;
+        successMessage.innerHTML = `
+          <div style="font-size: 48px; margin-bottom: 10px;">☕</div>
+          <div style="font-size: 18px; margin-bottom: 5px;">Break Started!</div>
+          <div style="font-size: 16px; opacity: 0.9;">${minutes} minute${minutes !== 1 ? 's' : ''}</div>
+        `;
+        document.body.appendChild(successMessage);
+        
+        setTimeout(() => {
+          document.body.removeChild(successMessage);
+          window.close();
+        }, 1500);
+      })
+      .catch(error => {
+        console.error('Error starting break:', error);
+        setSaveStatus('Error starting break');
+      });
+    }
+  };
+
+  // Stop timer and reset counters
+  const handleStopAndReset = () => {
+    setSaveStatus('Stopping timer...');
+    
+    browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' })
+      .then(() => {
+        console.log('Timer stopped and counters reset');
+        setSaveStatus('Timer stopped!');
+        
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+      })
+      .catch(error => {
+        console.error('Error stopping timer:', error);
+        setSaveStatus('Error stopping timer');
+      });
   };
 
   const handleAddSite = () => {
@@ -326,6 +426,86 @@ export default function App() {
   const toggleEditMode = () => {
     setEditMode(!editMode);
   };
+
+  // If we're showing the pomodoro completion dialog
+  if (isPomodoroComplete) {
+    return (
+      <div className="container" style={{ textAlign: 'center' }}>
+        <div style={{ 
+          marginTop: '20px', 
+          marginBottom: '30px', 
+          fontSize: '48px', 
+          color: '#4caf50' 
+        }}>
+          🍅
+        </div>
+        <h1 style={{ marginBottom: '10px', color: '#4caf50' }}>Pomodoro Complete!</h1>
+        <p style={{ marginBottom: '24px' }}>
+          Great work! Your {completedPomodoroDuration} minute pomodoro session is complete.
+        </p>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <label htmlFor="break-minutes" style={{ display: 'block', marginBottom: '8px' }}>
+            Break duration (minutes):
+          </label>
+          <input
+            id="break-minutes"
+            type="number"
+            min="1"
+            max="30"
+            value={pomodoroMinutes}
+            onChange={(e) => setPomodoroMinutes(e.target.value)}
+            style={{
+              padding: '8px',
+              fontSize: '16px',
+              width: '60px',
+              textAlign: 'center',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              marginBottom: '20px'
+            }}
+          />
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+          <button 
+            onClick={handleStopAndReset}
+            style={{
+              flex: 1,
+              padding: '10px',
+              backgroundColor: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Stop & Reset Counters
+          </button>
+          <button 
+            onClick={handleStartBreak}
+            style={{
+              flex: 1,
+              padding: '10px',
+              backgroundColor: '#2196f3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Start Break
+          </button>
+        </div>
+        
+        {saveStatus && (
+          <div style={{ marginTop: '15px', color: '#4caf50', fontWeight: 'bold' }}>
+            {saveStatus}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;

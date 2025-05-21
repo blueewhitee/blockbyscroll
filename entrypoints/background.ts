@@ -58,8 +58,8 @@ export default defineBackground(() => {
       console.log(`Found ${tabs.length} tabs to notify`);
       let notificationPromises = [];
       
-      for (const tab of tabs) {
-        if (tab.id) {
+        for (const tab of tabs) {
+          if (tab.id) {
           console.log(`Sending message to tab ${tab.id} (${tab.url || 'unknown url'})`);
           
           // Add each message sending operation to our promises array
@@ -207,7 +207,7 @@ export default defineBackground(() => {
       const now = Date.now();
       const remainingTime = Math.max(0, pomodoroEndTime - now);
       const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
-      const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+      const remainingSeconds = Math.floor(remainingTime % (60 * 1000) / 1000);
       
       const updateMessage = {
         type: 'POMODORO_UPDATE',
@@ -217,56 +217,113 @@ export default defineBackground(() => {
           seconds: remainingSeconds
         },
         duration: pomodoroDuration,
-        isActive: true
+        isActive: true,
+        forceDisplay: true // Force display of the overlay
       };
       
-      // If we have a source tab ID, update it first for immediate feedback
-      if (sourceTabId) {
-        console.log(`Sending immediate update to source tab ${sourceTabId}`);
-        browser.tabs.sendMessage(sourceTabId, updateMessage)
-          .catch(err => console.log(`Error sending to source tab: ${err.message}`));
-      }
+      // Force notification to ALL tabs, including chrome:// tabs if possible
+      console.log('IMPORTANT: Sending forced pomodoro update to all tabs');
       
-      // Then send immediate update to all tabs
-      console.log('Sending immediate pomodoro update to all tabs');
-      updateAllContentScripts(updateMessage);
+      try {
+        // Get ALL tabs
+        browser.tabs.query({}).then(tabs => {
+          console.log(`Found ${tabs.length} tabs to notify about pomodoro start`);
+          // Send message to each tab individually
+          for (const tab of tabs) {
+            if (tab.id) {
+              browser.tabs.sendMessage(tab.id, updateMessage)
+                .catch(err => {
+                  // This is normal for tabs that don't have our content script (like chrome:// URLs)
+                  console.log(`Could not send to tab ${tab.id}: ${err.message}`);
+                });
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Error notifying tabs about pomodoro:', err);
+      }
       
       // Set new pomodoro timer
       pomodoroTimer = setTimeout(() => {
-        // When pomodoro timer is done, reset counters
-        browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-          const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
-          const scrollCounts = result.scrollCounts || {};
-          const resetTime = Date.now();
+        // When pomodoro timer is done
+        console.log('Pomodoro timer completed!');
+        pomodoroTimer = null;
+        
+        // Save that pomodoro is no longer active
+        isPomodoroActive = false;
+        
+        // Instead of relying on messaging, which seems unreliable for this critical feature,
+        // we'll open a special completion page that offers the break option
+        try {
+          // Define a URL with parameters for the popup to use
+          const params = new URLSearchParams({
+            action: 'pomodoro_complete',
+            duration: pomodoroDuration.toString(),
+            completedAt: Date.now().toString()
+          }).toString();
           
-          // Reset all domain-specific counters
-          sites.forEach(site => {
-            scrollCounts[site] = 0;
+          // Open popup window with completion dialog
+          browser.windows.create({
+            url: browser.runtime.getURL(`popup/index.html?${params}`),
+            type: 'popup',
+            width: 400,
+            height: 300
+          }).then(popupWindow => {
+            console.log('Opened pomodoro completion popup window', popupWindow);
           });
           
-          // Save the reset counters
-          browser.storage.sync.set({ 
-            scrollCounts: scrollCounts,
-            lastResetTime: resetTime
-          }).then(() => {
-            // Notify content script to reset counter
-            updateAllContentScripts({ 
-              type: 'POMODORO_COMPLETE',
+          // Also try a standard notification to alert the user
+          browser.notifications.create({
+            type: 'basic',
+            iconUrl: browser.runtime.getURL('icon/128.jpg'),
+            title: 'Pomodoro Complete!',
+            message: `Your ${minutes} minute pomodoro session is complete. Check the popup to start a break or stop the timer.`
+          });
+          
+          // Also try to notify all content scripts anyway as backup
+          browser.tabs.query({}).then(tabs => {
+            const promptMessage = {
+              type: 'POMODORO_COMPLETE_PROMPT',
+              duration: pomodoroDuration,
+              forceDisplay: true
+            };
+            
+            // Send message to each tab individually
+            for (const tab of tabs) {
+              if (tab.id) {
+                browser.tabs.sendMessage(tab.id, promptMessage).catch(() => {
+                  // This error is expected for tabs without our content script
+                });
+              }
+            }
+          });
+        } catch (err) {
+          console.error('Error handling pomodoro completion:', err);
+          
+          // Fallback: just stop the pomodoro and reset counters
+          browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
+            const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+            const scrollCounts = result.scrollCounts || {};
+            const resetTime = Date.now();
+            
+            // Reset all domain-specific counters
+            sites.forEach(site => {
+              scrollCounts[site] = 0;
+            });
+            
+            // Save the reset counters
+            browser.storage.sync.set({ 
+              scrollCounts: scrollCounts,
               lastResetTime: resetTime
+            }).then(() => {
+              // Notify content script to reset counter
+              updateAllContentScripts({ 
+                type: 'POMODORO_COMPLETE',
+                lastResetTime: resetTime
+              });
             });
-            
-            // Show notification when pomodoro is complete
-            browser.notifications.create({
-              type: 'basic',
-              iconUrl: browser.runtime.getURL('icons/icon-128.png'),
-              title: 'Pomodoro Complete!',
-              message: `Your ${minutes} minute pomodoro session is complete. Take a break!`
-            });
-            
-            pomodoroTimer = null;
-            isPomodoroActive = false;
           });
-        });
+        }
       }, pomodoroTime);
       
       // Show notification that pomodoro started
@@ -284,6 +341,101 @@ export default defineBackground(() => {
       return true; // Required for async response
     }
     
+    // Handle starting a break after pomodoro completion
+    if (message.type === 'START_BREAK') {
+      const breakMinutes = message.minutes || 5; // Default to 5-minute break
+      
+      console.log(`Starting ${breakMinutes} minute break`);
+      
+      // Clear any existing timer
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      
+      // Convert minutes to milliseconds
+      const breakTime = breakMinutes * 60 * 1000;
+      
+      // Save break end time and status
+      pomodoroEndTime = Date.now() + breakTime;
+      isPomodoroActive = true;
+      pomodoroDuration = breakMinutes;
+      
+      // Create update message for break
+      const now = Date.now();
+      const remainingTime = Math.max(0, pomodoroEndTime - now);
+      const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+      const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+      
+      const updateMessage = {
+        type: 'POMODORO_UPDATE',
+        remaining: {
+          total: remainingTime,
+          minutes: remainingMinutes,
+          seconds: remainingSeconds
+        },
+        duration: pomodoroDuration,
+        isActive: true,
+        isBreak: true // Flag to indicate this is a break
+      };
+      
+      // Send update to all tabs
+      updateAllContentScripts(updateMessage);
+      
+      // Set new timer for break
+      pomodoroTimer = setTimeout(() => {
+        // When break is done
+        browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
+          const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+          const scrollCounts = result.scrollCounts || {};
+          const resetTime = Date.now();
+          
+          // Reset all domain-specific counters
+          sites.forEach(site => {
+            scrollCounts[site] = 0;
+          });
+          
+          // Save the reset counters
+          browser.storage.sync.set({ 
+            scrollCounts: scrollCounts,
+            lastResetTime: resetTime
+          }).then(() => {
+            // Notify content script that break is complete
+            updateAllContentScripts({ 
+              type: 'BREAK_COMPLETE',
+              lastResetTime: resetTime
+            });
+            
+            // Show notification when break is complete
+            browser.notifications.create({
+              type: 'basic',
+              iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+              title: 'Break Complete!',
+              message: `Your ${breakMinutes} minute break is complete. Ready to start another pomodoro?`
+            });
+            
+            pomodoroTimer = null;
+            isPomodoroActive = false;
+          });
+        });
+      }, breakTime);
+      
+      // Show notification that break started
+      browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('icons/icon-128.png'),
+        title: 'Break Started',
+        message: `${breakMinutes} minute break timer started. Relax!`
+      });
+      
+      // Start sending updates to content scripts
+      updatePomodoroStatus();
+      
+      sendResponse({ success: true });
+      return true; // Required for async response
+    }
+    
+    // Regular stop pomodoro without resetting counters
     if (message.type === 'STOP_POMODORO') {
       // Clear the timer
       if (pomodoroTimer) {
@@ -313,6 +465,48 @@ export default defineBackground(() => {
       return true; // Required for async response
     }
     
+    // Handle stopping pomodoro/break and resetting counters
+    if (message.type === 'STOP_POMODORO_AND_RESET') {
+      // Clear the timer
+      if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+      
+      // Update status
+      isPomodoroActive = false;
+      pomodoroEndTime = 0;
+      
+      // Reset counters
+      browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
+        const sites = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+        const scrollCounts = result.scrollCounts || {};
+        const resetTime = Date.now();
+        
+        // Reset all domain-specific counters
+        sites.forEach(site => {
+          scrollCounts[site] = 0;
+        });
+        
+        // Save the reset counters
+        browser.storage.sync.set({ 
+          scrollCounts: scrollCounts,
+          lastResetTime: resetTime
+        }).then(() => {
+          // Notify all tabs that pomodoro is stopped and counters are reset
+          updateAllContentScripts({
+            type: 'POMODORO_STOPPED_AND_RESET',
+            isActive: false,
+            lastResetTime: resetTime
+          });
+          
+          sendResponse({ success: true });
+        });
+      });
+      
+      return true; // Required for async response
+    }
+    
     if (message.type === 'GET_POMODORO_STATUS') {
       if (isPomodoroActive && pomodoroEndTime > Date.now()) {
         const now = Date.now();
@@ -322,24 +516,24 @@ export default defineBackground(() => {
         
         // Only report active if there's actually time remaining
         if (remainingTime > 0) {
-          sendResponse({
-            isActive: true,
-            remaining: {
-              total: remainingTime,
-              minutes: remainingMinutes,
-              seconds: remainingSeconds
-            },
-            duration: pomodoroDuration
-          });
+        sendResponse({
+          isActive: true,
+          remaining: {
+            total: remainingTime,
+            minutes: remainingMinutes,
+            seconds: remainingSeconds
+          },
+          duration: pomodoroDuration
+        });
           return true;
         }
       }
       
       // Default to inactive state if any condition fails
       isPomodoroActive = false;
-      sendResponse({
-        isActive: false
-      });
+        sendResponse({
+          isActive: false
+        });
       return true; // Required for async response
     }
     
