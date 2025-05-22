@@ -23,6 +23,17 @@ export default defineConfig({
       "96": "icon/96.jpg",
       "128": "icon/128.jpg"
     },
+    commands: {
+      "toggle-pomodoro": {
+        suggested_key: {
+          default: "Alt+Shift+P",
+          windows: "Alt+Shift+P",
+          mac: "Alt+Shift+P",
+          linux: "Alt+Shift+P"
+        },
+        description: "Start or stop the Pomodoro timer"
+      }
+    },
     // The content_scripts array previously here has been removed.
     // WXT will auto-discover content scripts from the entrypoints/ directory.
     // Ensure matching patterns (including for file://*/*) are defined

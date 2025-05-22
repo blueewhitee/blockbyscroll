@@ -688,6 +688,104 @@ export default defineBackground(() => {
     }
   });
 
+  // Listener for keyboard shortcuts
+  browser.commands.onCommand.addListener((command) => {
+    if (command === "toggle-pomodoro") {
+      console.log('BACKGROUND: Toggle Pomodoro command received');
+      if (isPomodoroActive) {
+        // If Pomodoro is active, stop it
+        if (pomodoroTimer) {
+          clearTimeout(pomodoroTimer);
+          pomodoroTimer = null;
+        }
+        isPomodoroActive = false;
+        isBreakActive = false;
+        pomodoroEndTime = 0;
+        updateAllContentScripts({
+          type: 'POMODORO_UPDATE',
+          isActive: false
+        });
+        browser.notifications.create({
+          type: 'basic',
+          iconUrl: browser.runtime.getURL('/icon/128.jpg'),
+          title: 'Pomodoro Stopped',
+          message: 'Pomodoro timer stopped via keyboard shortcut.'
+        });
+      } else {
+        // If Pomodoro is not active, start it with the last used work duration or default
+        const minutesToStart = lastPomodoroWorkDuration || 25;
+        console.log(`BACKGROUND: Starting Pomodoro for ${minutesToStart} minutes via keyboard shortcut.`);
+
+        if (pomodoroTimer) {
+          clearTimeout(pomodoroTimer);
+          pomodoroTimer = null;
+        }
+
+        const pomodoroTime = minutesToStart * 60 * 1000;
+        pomodoroEndTime = Date.now() + pomodoroTime;
+        isPomodoroActive = true;
+        isBreakActive = false;
+        pomodoroDuration = minutesToStart;
+        lastPomodoroWorkDuration = minutesToStart; // Ensure this is set for the session
+
+        const now = Date.now();
+        const remainingTime = Math.max(0, pomodoroEndTime - now);
+        const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+        const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+
+        const updateMessage = {
+          type: 'POMODORO_UPDATE',
+          remaining: { total: remainingTime, minutes: remainingMinutes, seconds: remainingSeconds },
+          duration: pomodoroDuration,
+          isActive: true,
+          isBreak: false,
+          forceDisplay: true
+        };
+        updateAllContentScripts(updateMessage);
+
+        pomodoroTimer = setTimeout(() => {
+          console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed (started by shortcut)!`);
+          pomodoroTimer = null;
+          updateAllContentScripts({
+            type: 'POMODORO_COMPLETE_PROMPT',
+            duration: pomodoroDuration,
+            forceDisplay: true
+          });
+          browser.notifications.create({
+            type: 'basic',
+            iconUrl: browser.runtime.getURL('/icon/128.jpg'),
+            title: 'Pomodoro Complete!',
+            message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
+          });
+          // Fallback timer logic (copied from SET_POMODORO)
+          if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
+          pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
+            if (isPomodoroActive || pomodoroEndTime <= Date.now()) {
+              const params = new URLSearchParams({
+                  action: 'pomodoro_complete',
+                  duration: pomodoroDuration.toString(),
+                  completedAt: Date.now().toString()
+              }).toString();
+              browser.windows.create({
+                  url: browser.runtime.getURL(`/popup/index.html?${params}` as any),
+                  type: 'popup', width: 420, height: 350
+              });
+              isPomodoroActive = false;
+            }
+          }, 15000);
+        }, pomodoroTime);
+
+        browser.notifications.create({
+          type: 'basic',
+          iconUrl: browser.runtime.getURL('/icon/128.jpg'),
+          title: 'Pomodoro Started',
+          message: `${minutesToStart} minute pomodoro timer started via keyboard shortcut.`
+        });
+        updatePomodoroStatus();
+      }
+    }
+  });
+
   // Check for time-based reset periodically
   function checkTimeBasedReset() {
     // Skip if there are pending storage operations to avoid conflicts

@@ -139,7 +139,7 @@ export default defineContentScript({
     `;
     
     // Add listener for messages from the background script
-    browser.runtime.onMessage.addListener((message) => {
+    browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.log('CONTENT SCRIPT: Received message:', JSON.stringify(message));
 
       // Helper function to remove the completion modal
@@ -175,21 +175,16 @@ export default defineContentScript({
           const remainingMs = (message.remaining.minutes * 60 + message.remaining.seconds) * 1000;
           pomodoroEndTime = Date.now() + remainingMs;
           
-          if (!pomodoroOverlay || !document.body.contains(pomodoroOverlay)) {
-            console.log('CONTENT SCRIPT: Pomodoro overlay does not exist or not in DOM. Creating...');
-            createPomodoroOverlay();
-          } else {
-            console.log('CONTENT SCRIPT: Pomodoro overlay already exists.');
-          }
+          await createPomodoroOverlay(); // Await creation and DOM insertion
           
           updatePomodoroDisplay(message.remaining.minutes, message.remaining.seconds, message.duration, message.isBreak);
           
           if (message.forceDisplay || isPomodoroActive) {
             console.log('CONTENT SCRIPT: Setting pomodoro overlay display to block.');
-            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block'; // Null check
+            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block';
           }
           
-          if (pomodoroOverlay) { // Null check for styling
+          if (pomodoroOverlay) {
             if (message.isBreak) {
               console.log('CONTENT SCRIPT: Setting break styling.');
               pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
@@ -475,7 +470,7 @@ export default defineContentScript({
     function checkPomodoroStatus() {
       console.log('Checking pomodoro status...');
       browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-        .then(status => {
+        .then(async status => {
           console.log('Got pomodoro status:', status);
           if (status && status.isActive) {
             isPomodoroActive = true;
@@ -483,15 +478,14 @@ export default defineContentScript({
             pomodoroRemainingSeconds = status.remaining.seconds;
             pomodoroDuration = status.duration;
             
-            // Calculate and store the end time
             const remainingMs = (status.remaining.minutes * 60 + status.remaining.seconds) * 1000;
             pomodoroEndTime = Date.now() + remainingMs;
             
-            // Update the display immediately with correct break status
+            await createPomodoroOverlay(); // Ensure overlay is ready
+
             updatePomodoroDisplay(status.remaining.minutes, status.remaining.seconds, status.duration, status.isBreak);
-            pomodoroOverlay.style.display = 'block';
+            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block';
             
-            // Apply break styling if needed
             if (status.isBreak && pomodoroOverlay) {
               console.log('CONTENT SCRIPT: Setting break styling on refresh.');
               pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
@@ -499,11 +493,10 @@ export default defineContentScript({
               if (iconElement) iconElement.textContent = '☕';
             }
             
-            // Start the local countdown
             startLocalPomodoroUpdate();
           } else {
             isPomodoroActive = false;
-            pomodoroOverlay.style.display = 'none';
+            if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
             stopLocalPomodoroUpdate();
           }
         })
@@ -513,191 +506,157 @@ export default defineContentScript({
     }
     
     // Create pomodoro timer overlay
-    function createPomodoroOverlay() {
-      console.log('Creating pomodoro overlay element');
-      
-      // First check if it already exists
-      if (pomodoroOverlay && document.body.contains(pomodoroOverlay)) {
-        console.log('Pomodoro overlay already exists');
-        return;
-      }
-
-      // Clean up any existing overlay that might be detached
-      if (pomodoroOverlay) {
-        try {
-          pomodoroOverlay.remove();
-        } catch (e) {
-          console.error('Error removing existing overlay:', e);
+    function createPomodoroOverlay(): Promise<void> {
+      return new Promise((resolve) => {
+        if (pomodoroOverlay && document.body.contains(pomodoroOverlay)) {
+          console.log('CONTENT SCRIPT: Pomodoro overlay already exists in DOM.');
+          resolve();
+          return;
         }
-      }
-      
-      pomodoroOverlay = document.createElement('div');
-      pomodoroOverlay.id = 'pomodoro-timer-overlay';
-      pomodoroOverlay.style.cssText = `
-        position: fixed;
-        background-color: rgba(76, 175, 80, 0.85);
-        color: white;
-        padding: 6px 10px;
-        border-radius: 20px;
-        font-weight: bold;
-        z-index: 2147483647; /* Maximum z-index to ensure visibility */
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        display: none;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        animation: pomodoroFadeIn 0.5s ease-in-out;
-        font-size: 12px;
-      `;
-      
-      const isLocalPdf = window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf');
 
-      if (isLocalPdf) {
-        pomodoroOverlay.style.bottom = '20px';
-        pomodoroOverlay.style.right = '20px';
-        // Animate from bottom
-        pomodoroOverlay.animate([
-          { transform: 'translateY(30px)', opacity: 0 },
-          { transform: 'translateY(0)', opacity: 1 }
-        ], {
-          duration: 300,
-          easing: 'ease-out'
-        });
-      } else {
-        pomodoroOverlay.style.top = '20px';
-        pomodoroOverlay.style.right = '20px';
-        // Original animation from top
-        pomodoroOverlay.animate([
-          { transform: 'translateY(-30px)', opacity: 0 },
-          { transform: 'translateY(0)', opacity: 1 }
-        ], {
-          duration: 300,
-          easing: 'ease-out'
-        });
-      }
-      pomodoroOverlay.style.opacity = '1'; // Set opacity to 1 after animation setup
-      
-      // Add keyframes for fade-in animation
-      let pomodoroStyle = document.getElementById('pomodoro-animation-style');
-      if (!pomodoroStyle) {
-        pomodoroStyle = document.createElement('style');
-        pomodoroStyle.id = 'pomodoro-animation-style';
-        pomodoroStyle.innerHTML = `
-          @keyframes pomodoroFadeIn {
-            0% { opacity: 0; transform: translateY(-10px); }
-            100% { opacity: 1; transform: translateY(0); }
+        if (pomodoroOverlay) { // Exists but not in DOM (detached)
+          try {
+            pomodoroOverlay.remove();
+            console.log('CONTENT SCRIPT: Removed detached pomodoroOverlay before recreating.');
+          } catch (e) {
+            console.error('CONTENT SCRIPT: Error removing detached pomodoroOverlay:', e);
           }
-        `;
-        document.head.appendChild(pomodoroStyle);
-      }
-      
-      pomodoroOverlay.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <div class="pomodoro-icon" style="margin-right: 5px; font-size: 14px;">🍅</div>
-          <div id="pomodoro-time" style="font-size: 12px; font-weight: bold;">00:00/00:00</div>
-          <div style="margin-left: 5px; font-size: 10px; opacity: 0.8;">✕</div>
-        </div>
-      `;
-      
-      // Add click handler to stop pomodoro
-      pomodoroOverlay.addEventListener('click', () => {
-        // Show a confirmation dialog
-        if (confirm('Stop pomodoro timer?')) {
-          // Stop local timer
-          stopLocalPomodoroUpdate();
-          
-          // Hide the overlay
-          pomodoroOverlay.style.display = 'none';
-          
-          // Tell background script to stop timer
-          browser.runtime.sendMessage({ type: 'STOP_POMODORO' })
-            .catch(err => console.error('Error stopping pomodoro:', err));
-          
-          isPomodoroActive = false;
         }
-      });
-      
-      // Add hover effect
-      pomodoroOverlay.addEventListener('mouseenter', () => {
-        // Check if this is a break timer before applying hover styling
-        browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-          .then(status => {
-            if (status && status.isActive && status.isBreak) {
-              // Apply more opaque blue for breaks
-              pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 1)';
-            } else {
-              // Default to opaque green for regular pomodoro hover
-              pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)';
-            }
-          })
-          .catch(() => {
-            // Fallback to default green if error occurs
-            pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)';
-          });
         
-        pomodoroOverlay.style.transform = 'scale(1.05)';
-      });
-      
-      pomodoroOverlay.addEventListener('mouseleave', () => {
-        // Check if this is a break timer before applying the default green color
-        browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-          .then(status => {
-            if (status && status.isActive && status.isBreak) {
-              // Apply blue color for breaks
-              pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
-            } else {
-              // Default to green for regular pomodoro
-              pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
-            }
-          })
-          .catch(() => {
-            // Fallback to default green if error occurs
-            pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
-          });
-          
-        pomodoroOverlay.style.transform = 'scale(1)';
-      });
+        console.log('CONTENT SCRIPT: Creating new pomodoro overlay element.');
+        pomodoroOverlay = document.createElement('div');
+        pomodoroOverlay.id = 'pomodoro-timer-overlay';
+        pomodoroOverlay.style.cssText = `
+          position: fixed;
+          background-color: rgba(76, 175, 80, 0.85);
+          color: white;
+          padding: 6px 10px;
+          border-radius: 20px;
+          font-weight: bold;
+          z-index: 2147483647; /* Maximum z-index to ensure visibility */
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          display: none; /* Start hidden, will be shown by handler */
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          backdrop-filter: blur(2px);
+          -webkit-backdrop-filter: blur(2px);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          /* animation: pomodoroFadeIn 0.5s ease-in-out; // Animation applied on show */
+          font-size: 12px;
+        `;
+        
+        const isLocalPdf = window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf');
 
-      // Wait for document.body to be available
-      if (document.body) {
-        document.body.appendChild(pomodoroOverlay);
-        console.log('Pomodoro overlay added to DOM');
-      } else {
-        // If body is not available yet, wait for it
-        console.log('Body not available, waiting to add overlay');
-        const checkBodyAndAppend = setInterval(() => {
-          if (document.body) {
-            clearInterval(checkBodyAndAppend);
-            document.body.appendChild(pomodoroOverlay);
-            console.log('Pomodoro overlay added to DOM (delayed)');
+        if (isLocalPdf) {
+          pomodoroOverlay.style.bottom = '20px';
+          pomodoroOverlay.style.right = '20px';
+        } else {
+          pomodoroOverlay.style.top = '20px';
+          pomodoroOverlay.style.right = '20px';
+        }
+        // Opacity and animation will be handled when shown
+        
+        let pomodoroStyle = document.getElementById('pomodoro-animation-style');
+        if (!pomodoroStyle) {
+          pomodoroStyle = document.createElement('style');
+          pomodoroStyle.id = 'pomodoro-animation-style';
+          pomodoroStyle.innerHTML = `
+            @keyframes pomodoroFadeInUp {
+              0% { opacity: 0; transform: translateY(10px); }
+              100% { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes pomodoroFadeInDown {
+              0% { opacity: 0; transform: translateY(-10px); }
+              100% { opacity: 1; transform: translateY(0); }
+            }
+          `;
+          document.head.appendChild(pomodoroStyle);
+        }
+        
+        pomodoroOverlay.innerHTML = `
+          <div style="display: flex; align-items: center;">
+            <div class="pomodoro-icon" style="margin-right: 5px; font-size: 14px;">🍅</div>
+            <div id="pomodoro-time" style="font-size: 12px; font-weight: bold;">00:00/00:00</div>
+            <div style="margin-left: 5px; font-size: 10px; opacity: 0.8;">✕</div>
+          </div>
+        `;
+        
+        pomodoroOverlay.addEventListener('click', () => {
+          if (confirm('Stop pomodoro timer?')) {
+            stopLocalPomodoroUpdate();
+            if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
+            browser.runtime.sendMessage({ type: 'STOP_POMODORO' })
+              .catch(err => console.error('Error stopping pomodoro:', err));
+            isPomodoroActive = false;
           }
-        }, 100);
-      }
+        });
+        
+        pomodoroOverlay.addEventListener('mouseenter', () => {
+          browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
+            .then(status => {
+              if (status && status.isActive) {
+                pomodoroOverlay.style.backgroundColor = status.isBreak ? 'rgba(33, 150, 243, 1)' : 'rgba(76, 175, 80, 1)';
+              } else {
+                pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)';
+              }
+            })
+            .catch(() => { pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)'; });
+          pomodoroOverlay.style.transform = 'scale(1.05)';
+        });
+        
+        pomodoroOverlay.addEventListener('mouseleave', () => {
+          browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
+            .then(status => {
+              if (status && status.isActive) {
+                pomodoroOverlay.style.backgroundColor = status.isBreak ? 'rgba(33, 150, 243, 0.85)' : 'rgba(76, 175, 80, 0.85)';
+              } else {
+                 pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
+              }
+            })
+            .catch(() => { pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)'; });
+          pomodoroOverlay.style.transform = 'scale(1)';
+        });
+
+        const tryAppendAndResolve = () => {
+          if (document.body) {
+            if (!document.body.contains(pomodoroOverlay)) {
+              document.body.appendChild(pomodoroOverlay);
+              console.log('CONTENT SCRIPT: Pomodoro overlay appended to DOM.');
+            }
+            // Apply animation when it's about to be shown
+            if (isLocalPdf) {
+                pomodoroOverlay.style.animation = 'pomodoroFadeInUp 0.3s ease-out';
+            } else {
+                pomodoroOverlay.style.animation = 'pomodoroFadeInDown 0.3s ease-out';
+            }
+            pomodoroOverlay.style.opacity = '1'; // Ensure opacity is set
+            resolve();
+          } else {
+            console.log('CONTENT SCRIPT: document.body not ready, retrying append Pomodoro overlay.');
+            setTimeout(tryAppendAndResolve, 100);
+          }
+        };
+        tryAppendAndResolve();
+      });
     }
     
     // Initialize pomodoro immediately
-    function initializePomodoroFeatures() {
+    async function initializePomodoroFeatures() {
       console.log('Initializing pomodoro features...');
-      // Create and add the overlay (but keep it hidden until explicitly started)
-      createPomodoroOverlay();
+      await createPomodoroOverlay(); // Await creation
+      console.log('CONTENT SCRIPT: Pomodoro overlay ensured by initializePomodoroFeatures.');
       
-      // We will only check pomodoro status when explicitly triggered from the popup
-      // The message listener will handle updates when a pomodoro is started
       setTimeout(() => {
-        // Check if a pomodoro is already active
         checkPomodoroStatus();
-      }, 1000);
+      }, 1000); // Keep delay for initial status check after load
     }
     
     // Execute initialization immediately for pomodoro features
-    // We want these to run on ALL tabs regardless of whether it's a distracting site
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializePomodoroFeatures);
+      document.addEventListener('DOMContentLoaded', () => initializePomodoroFeatures().catch(console.error));
     } else {
-      initializePomodoroFeatures();
+      initializePomodoroFeatures().catch(console.error);
     }
     
     // Also call getSettings immediately to initialize scroll blocking features
@@ -880,6 +839,14 @@ export default defineContentScript({
     function updateCounter() {
       const effectiveMax = getEffectiveScrollLimit();
       counter.textContent = `Scrolls: ${scrollCount}/${effectiveMax}`;
+
+      // Change counter color to red if 80% of scrolls are used (20% remaining)
+      const eightyPercentUsedThreshold = effectiveMax * 0.8;
+      if (effectiveMax > 0 && scrollCount >= eightyPercentUsedThreshold) {
+        counter.style.backgroundColor = 'rgba(244, 67, 54, 0.8)'; // Red color
+      } else {
+        counter.style.backgroundColor = 'rgba(29, 161, 242, 0.8)'; // Original blue color
+      }
       
       // Also update timer display if reset interval is enabled
       if (resetInterval > 0) {
