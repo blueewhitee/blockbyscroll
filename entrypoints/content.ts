@@ -180,8 +180,13 @@ export default defineContentScript({
           updatePomodoroDisplay(message.remaining.minutes, message.remaining.seconds, message.duration, message.isBreak);
           
           if (message.forceDisplay || isPomodoroActive) {
-            console.log('CONTENT SCRIPT: Setting pomodoro overlay display to block.');
-            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block';
+            console.log('CONTENT SCRIPT: Attempting to show pomodoro overlay via POMODORO_UPDATE. Overlay object:', pomodoroOverlay, 'isPomodoroActive:', isPomodoroActive, 'forceDisplay:', message.forceDisplay);
+            if (pomodoroOverlay) {
+              pomodoroOverlay.style.setProperty('display', 'block', 'important'); // Ensure display:block overrides other styles
+              console.log('CONTENT SCRIPT: Set pomodoro overlay display to block via POMODORO_UPDATE. Current display style:', pomodoroOverlay.style.display);
+            } else {
+              console.error('CONTENT SCRIPT: pomodoroOverlay is null or undefined when trying to show it in POMODORO_UPDATE.');
+            }
           }
           
           if (pomodoroOverlay) {
@@ -462,7 +467,13 @@ export default defineContentScript({
             await createPomodoroOverlay(); // Ensure overlay is ready
 
             updatePomodoroDisplay(status.remaining.minutes, status.remaining.seconds, status.duration, status.isBreak);
-            if (pomodoroOverlay) pomodoroOverlay.style.display = 'block';
+            console.log('CONTENT SCRIPT: Attempting to show pomodoro overlay from checkPomodoroStatus. Overlay object:', pomodoroOverlay, 'Status isActive:', status.isActive);
+            if (pomodoroOverlay) {
+              pomodoroOverlay.style.setProperty('display', 'block', 'important'); // Ensure display:block overrides other styles
+              console.log('CONTENT SCRIPT: Set pomodoro overlay display to block from checkPomodoroStatus. Current display style:', pomodoroOverlay.style.display);
+            } else {
+              console.error('CONTENT SCRIPT: pomodoroOverlay is null or undefined when trying to show it in checkPomodoroStatus.');
+            }
             
             if (status.isBreak && pomodoroOverlay) {
               console.log('CONTENT SCRIPT: Setting break styling on refresh.');
@@ -523,6 +534,7 @@ export default defineContentScript({
           border: 1px solid rgba(255, 255, 255, 0.3);
           font-size: 12px;
         `;
+        pomodoroOverlay.style.cssText = cssText; // Apply the base CSS string
         
         // Detect PDF files - both local files and web-served PDFs
         const isPdfFile = (
