@@ -22,8 +22,24 @@ export default function App() {
   const [editMode, setEditMode] = useState<boolean>(false);
   const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
+  const [showPomodoroCompletePopup, setShowPomodoroCompletePopup] = useState<boolean>(false);
+  const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
 
   useEffect(() => {
+    // Check for URL parameters to handle pomodoro completion popup
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+    const duration = urlParams.get('duration');
+    
+    if (action === 'pomodoro_complete' && duration) {
+      const durationNum = parseInt(duration, 10);
+      if (!isNaN(durationNum)) {
+        setCompletedPomodoroDuration(durationNum);
+        setShowPomodoroCompletePopup(true);
+        return; // Skip the normal tab querying if showing completion popup
+      }
+    }
+
     // Get current active tab to identify the current domain
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       const activeTab = tabs[0];
@@ -232,6 +248,20 @@ export default function App() {
     setShowPomodoroPopup(false);
   };
 
+  const handlePomodoroCompleteStart5MinBreak = () => {
+    const breakDuration = Math.round(completedPomodoroDuration / 5) || 5;
+    browser.runtime.sendMessage({ 
+      type: 'START_BREAK', 
+      minutes: breakDuration 
+    });
+    window.close();
+  };
+
+  const handlePomodoroCompleteStopAndReset = () => {
+    browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' });
+    window.close();
+  };
+
   const handleAddSite = () => {
     if (newSite.trim() === '') return;
 
@@ -279,6 +309,18 @@ export default function App() {
   const toggleEditMode = () => {
     setEditMode(!editMode);
   };
+
+  useEffect(() => {
+    // Check if this popup was opened for pomodoro completion
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+    const duration = urlParams.get('duration');
+    
+    if (action === 'pomodoro_complete' && duration) {
+      setCompletedPomodoroDuration(parseInt(duration));
+      setShowPomodoroCompletePopup(true);
+    }
+  }, []);
 
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
@@ -511,6 +553,83 @@ export default function App() {
                   }}
                 >
                   Start
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPomodoroCompletePopup && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.8)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+            }}
+          >
+            <div 
+              style={{
+                backgroundColor: 'white',
+                padding: '25px',
+                borderRadius: '12px',
+                width: '350px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{fontSize: '48px', marginBottom: '15px'}}>🎉</div>
+              <h2 style={{margin: '0 0 10px', color: '#333', fontSize: '22px', fontWeight: '600'}}>Pomodoro Complete!</h2>
+              <p style={{margin: '0 0 20px', fontSize: '15px', color: '#555', lineHeight: '1.5'}}>
+                Great work! You've completed your {completedPomodoroDuration}-minute pomodoro session.
+              </p>
+              <p style={{margin: '0 0 25px', fontSize: '14px', color: '#666'}}>
+                Would you like to take a {Math.round(completedPomodoroDuration / 5) || 5}-minute break or stop the timer?
+              </p>
+              <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
+                <button 
+                  onClick={handlePomodoroCompleteStart5MinBreak}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    backgroundColor: '#2196f3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1976d2'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2196f3'}
+                >
+                  Start Break ({Math.round(completedPomodoroDuration / 5) || 5}m)
+                </button>
+                <button 
+                  onClick={handlePomodoroCompleteStopAndReset}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    backgroundColor: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#d32f2f'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f44336'}
+                >
+                  Stop & Reset
                 </button>
               </div>
             </div>

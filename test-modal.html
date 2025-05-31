@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Pomodoro Modal</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .break-btn {
+            background: #2196F3;
+        }
+        .break-btn:hover {
+            background: #1976D2;
+        }
+        .stop-btn {
+            background: #f44336;
+        }
+        .stop-btn:hover {
+            background: #d32f2f;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            border-left: 4px solid #2196F3;
+        }
+        .demo-content {
+            height: 200vh;
+            background: linear-gradient(45deg, #f0f0f0, #ffffff);
+            padding: 20px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🍅 Pomodoro Extension Test Page</h1>
+    
+    <div class="status">
+        <h3>Testing Instructions:</h3>
+        <ol>
+            <li>Click one of the buttons below to start a Pomodoro timer</li>
+            <li>Wait for the timer to complete (10 seconds for quick test, 25 minutes for full test)</li>
+            <li>When complete, a modal should appear <strong>directly on this page</strong> with "Pomodoro is over" message</li>
+            <li>The modal should have two buttons: "Take a Break" and "Stop & Reset"</li>
+            <li>Test both options to ensure they work correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>Quick Tests (10 seconds)</h2>
+        <p>These will complete in 10 seconds for immediate testing:</p>
+        <button onclick="startPomodoro(10/60, 'Quick Test')">Start 10-Second Test Timer</button>
+        <button onclick="startPomodoro(5/60, 'Quick Break Test')" class="break-btn">Start 5-Second Break Test</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Full Tests (25 minutes)</h2>
+        <p>These will run for the full duration:</p>
+        <button onclick="startPomodoro(25, 'Full Pomodoro')">Start 25-Minute Pomodoro</button>
+        <button onclick="startPomodoro(5, 'Full Break')" class="break-btn">Start 5-Minute Break</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Custom Duration</h2>
+        <input type="number" id="customMinutes" value="1" min="0.1" max="60" step="0.1">
+        <label for="customMinutes">minutes</label>
+        <button onclick="startCustomPomodoro()">Start Custom Timer</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Current Status</h2>
+        <div id="statusDisplay">No timer active</div>
+        <button onclick="checkStatus()">Refresh Status</button>
+        <button onclick="stopTimer()" class="stop-btn">Stop Current Timer</button>
+    </div>
+
+    <div class="demo-content">
+        <h3>Demo Content Area</h3>
+        <p>This is where you can scroll to test the scroll blocking feature while the Pomodoro is running.</p>
+        <p>Try scrolling down this page while a timer is active to see how the extension works.</p>
+        <p>The modal should appear on top of this content when the timer completes.</p>
+        
+        <div style="height: 100px; background: #ffeb3b; margin: 20px 0; padding: 20px; border-radius: 5px;">
+            <h4>Scroll Test Section 1</h4>
+            <p>Keep scrolling to test the scroll blocking functionality...</p>
+        </div>
+        
+        <div style="height: 100px; background: #ff9800; margin: 20px 0; padding: 20px; border-radius: 5px;">
+            <h4>Scroll Test Section 2</h4>
+            <p>The extension should block excessive scrolling on distracting sites...</p>
+        </div>
+        
+        <div style="height: 100px; background: #9c27b0; margin: 20px 0; padding: 20px; border-radius: 5px; color: white;">
+            <h4>Scroll Test Section 3</h4>
+            <p>When the Pomodoro completes, you should see a modal overlay...</p>
+        </div>
+        
+        <div style="height: 100px; background: #4caf50; margin: 20px 0; padding: 20px; border-radius: 5px; color: white;">
+            <h4>Scroll Test Section 4</h4>
+            <p>Test completed! The modal should work correctly.</p>
+        </div>
+    </div>
+
+    <script>
+        function startPomodoro(minutes, testType) {
+            console.log(`Starting ${testType}: ${minutes} minutes`);
+            
+            // Check if the extension is available
+            if (typeof browser === 'undefined' || !browser.runtime) {
+                alert('Extension not loaded! Please make sure the extension is installed and this page is reloaded.');
+                return;
+            }
+            
+            browser.runtime.sendMessage({
+                type: 'SET_POMODORO',
+                minutes: minutes,
+                sourceTabId: 'test-page'
+            }).then(response => {
+                if (response && response.success) {
+                    updateStatus(`${testType} started: ${minutes} minutes`);
+                    console.log(`${testType} started successfully`);
+                } else {
+                    console.error('Failed to start timer:', response);
+                    alert('Failed to start timer. Check console for details.');
+                }
+            }).catch(error => {
+                console.error('Error starting timer:', error);
+                alert('Error starting timer: ' + error.message);
+            });
+        }
+        
+        function startCustomPomodoro() {
+            const minutes = parseFloat(document.getElementById('customMinutes').value);
+            if (isNaN(minutes) || minutes <= 0) {
+                alert('Please enter a valid number of minutes');
+                return;
+            }
+            startPomodoro(minutes, 'Custom Timer');
+        }
+        
+        function checkStatus() {
+            if (typeof browser === 'undefined' || !browser.runtime) {
+                updateStatus('Extension not available');
+                return;
+            }
+            
+            browser.runtime.sendMessage({
+                type: 'GET_POMODORO_STATUS'
+            }).then(status => {
+                if (status && status.isActive) {
+                    const type = status.isBreak ? 'Break' : 'Pomodoro';
+                    updateStatus(`${type} active: ${status.remaining.minutes}:${status.remaining.seconds.toString().padStart(2, '0')} remaining (${status.duration} min total)`);
+                } else {
+                    updateStatus('No timer active');
+                }
+            }).catch(error => {
+                console.error('Error checking status:', error);
+                updateStatus('Error checking status: ' + error.message);
+            });
+        }
+        
+        function stopTimer() {
+            if (typeof browser === 'undefined' || !browser.runtime) {
+                alert('Extension not available');
+                return;
+            }
+            
+            browser.runtime.sendMessage({
+                type: 'STOP_POMODORO'
+            }).then(response => {
+                if (response && response.success) {
+                    updateStatus('Timer stopped');
+                    console.log('Timer stopped successfully');
+                } else {
+                    console.error('Failed to stop timer:', response);
+                }
+            }).catch(error => {
+                console.error('Error stopping timer:', error);
+                updateStatus('Error stopping timer: ' + error.message);
+            });
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('statusDisplay').textContent = message;
+            console.log('Status:', message);
+        }
+        
+        // Auto-refresh status every 2 seconds
+        setInterval(checkStatus, 2000);
+        
+        // Initial status check
+        setTimeout(checkStatus, 1000);
+        
+        // Listen for messages from the extension
+        if (typeof browser !== 'undefined' && browser.runtime) {
+            // This will show us what messages the page receives
+            browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                console.log('TEST PAGE: Received message:', message);
+                return true;
+            });
+        }
+        
+        console.log('Test page loaded. Extension available:', typeof browser !== 'undefined' && !!browser.runtime);
+    </script>
+</body>
+</html>

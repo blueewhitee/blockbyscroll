@@ -8,7 +8,7 @@ export default defineConfig({
   manifest: {
     name: 'NoMoScroll',
     description: 'Control scrolling on distracting websites to prevent doomscrolling',
-    version: '2.1.0',
+    version: '2.1.11',
     permissions: ['storage', 'tabs'],
     host_permissions: ['<all_urls>'], // Allow extension to run on any website
     action: {
