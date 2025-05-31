@@ -486,7 +486,7 @@ export default defineContentScript({
     // Create pomodoro timer overlay
     function createPomodoroOverlay(): Promise<void> {
       return new Promise((resolve) => {
-        if (pomodoroOverlay && document.body.contains(pomodoroOverlay)) {
+        if (pomodoroOverlay && (document.body.contains(pomodoroOverlay) || (document.documentElement && document.documentElement.contains(pomodoroOverlay)))) {
           console.log('CONTENT SCRIPT: Pomodoro overlay already exists in DOM.');
           resolve();
           return;
@@ -504,14 +504,15 @@ export default defineContentScript({
         console.log('CONTENT SCRIPT: Creating new pomodoro overlay element.');
         pomodoroOverlay = document.createElement('div');
         pomodoroOverlay.id = 'pomodoro-timer-overlay';
-        pomodoroOverlay.style.cssText = `
+        // Base CSS - will be customized below
+        let cssText = `
           position: fixed;
           background-color: rgba(76, 175, 80, 0.85);
           color: white;
           padding: 6px 10px;
           border-radius: 20px;
           font-weight: bold;
-          z-index: 2147483647; /* Maximum z-index to ensure visibility */
+          z-index: 2147483647 !important; /* Maximum z-index to ensure visibility, added !important */
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           display: none; /* Start hidden, will be shown by handler */
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -520,18 +521,34 @@ export default defineContentScript({
           cursor: pointer;
           transition: all 0.2s ease;
           border: 1px solid rgba(255, 255, 255, 0.3);
-          /* animation: pomodoroFadeIn 0.5s ease-in-out; // Animation applied on show */
           font-size: 12px;
         `;
         
-        const isLocalPdf = window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf');
+        // Detect PDF files - both local files and web-served PDFs
+        const isPdfFile = (
+          (window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf')) ||
+          window.location.pathname.endsWith('.pdf') ||
+          document.contentType === 'application/pdf' ||
+          document.querySelector('embed[type="application/pdf"]') !== null ||
+          document.querySelector('object[type="application/pdf"]') !== null ||
+          (document.body && document.body.children.length === 1 && document.body.children[0].tagName === 'EMBED' && (document.body.children[0] as HTMLEmbedElement).type === 'application/pdf') ||
+          (document.documentElement && document.documentElement.innerHTML.includes('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') && window.location.href.endsWith('.pdf'))
+        );
+        console.log(`CONTENT SCRIPT: PDF Detection: isPdfFile = ${isPdfFile}, Pathname: ${window.location.pathname}, ContentType: ${document.contentType}`);
 
-        if (isLocalPdf) {
-          pomodoroOverlay.style.bottom = '20px';
-          pomodoroOverlay.style.right = '20px';
+        if (isPdfFile) {
+          pomodoroOverlay.style.setProperty('position', 'fixed', 'important');
+          pomodoroOverlay.style.setProperty('bottom', '20px', 'important');
+          pomodoroOverlay.style.setProperty('right', '20px', 'important');
+          pomodoroOverlay.style.setProperty('top', 'unset', 'important');
+          pomodoroOverlay.style.setProperty('left', 'unset', 'important');
+          console.log('CONTENT SCRIPT: Applied PDF positioning styles with !important.');
         } else {
           pomodoroOverlay.style.top = '20px';
           pomodoroOverlay.style.right = '20px';
+          pomodoroOverlay.style.bottom = 'unset';
+          pomodoroOverlay.style.left = 'unset';
+          console.log('CONTENT SCRIPT: Applied non-PDF positioning styles.');
         }
         // Opacity and animation will be handled when shown
         
@@ -596,22 +613,26 @@ export default defineContentScript({
           pomodoroOverlay.style.transform = 'scale(1)';
         });
 
+        const parentElement = isPdfFile ? document.documentElement : document.body;
+
         const tryAppendAndResolve = () => {
-          if (document.body) {
-            if (!document.body.contains(pomodoroOverlay)) {
-              document.body.appendChild(pomodoroOverlay);
-              console.log('CONTENT SCRIPT: Pomodoro overlay appended to DOM.');
+          if (parentElement) {
+            if (!parentElement.contains(pomodoroOverlay)) {
+              parentElement.appendChild(pomodoroOverlay);
+              console.log(`CONTENT SCRIPT: Pomodoro overlay appended to ${isPdfFile ? 'document.documentElement' : 'document.body'}.`);
             }
             // Apply animation when it's about to be shown
-            if (isLocalPdf) {
+            if (isPdfFile) {
                 pomodoroOverlay.style.animation = 'pomodoroFadeInUp 0.3s ease-out';
+                console.log('CONTENT SCRIPT: Applying PDF animation (FadeInUp).');
             } else {
                 pomodoroOverlay.style.animation = 'pomodoroFadeInDown 0.3s ease-out';
+                console.log('CONTENT SCRIPT: Applying non-PDF animation (FadeInDown).');
             }
             pomodoroOverlay.style.opacity = '1'; // Ensure opacity is set
             resolve();
           } else {
-            console.log('CONTENT SCRIPT: document.body not ready, retrying append Pomodoro overlay.');
+            console.log(`CONTENT SCRIPT: ${isPdfFile ? 'document.documentElement' : 'document.body'} not ready, retrying append Pomodoro overlay.`);
             setTimeout(tryAppendAndResolve, 100);
           }
         };
@@ -876,6 +897,7 @@ export default defineContentScript({
       // Implement a throttled scroll counter to avoid too many DOM operations
       let isThrottled = false;
       const throttleTime = 250; // ms
+      let wheelEventCount = 0; // Counter for wheel events
       
       // Simple scroll event for regular pages
       window.addEventListener('scroll', () => {
