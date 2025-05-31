@@ -43,6 +43,20 @@ export default defineContentScript({
     let pomodoroEndTime = 0;
     let pomodoroUpdateInterval: ReturnType<typeof globalThis.setInterval> | null = null;
     let pomodoroOverlay: HTMLElement;
+
+    function checkIfPdf(): boolean {
+      const isPdf = (
+        (window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf')) ||
+        window.location.pathname.endsWith('.pdf') ||
+        document.contentType === 'application/pdf' ||
+        document.querySelector('embed[type="application/pdf"]') !== null ||
+        document.querySelector('object[type="application/pdf"]') !== null ||
+        (document.body && document.body.children.length === 1 && document.body.children[0].tagName === 'EMBED' && (document.body.children[0] as HTMLEmbedElement).type === 'application/pdf') ||
+        (document.documentElement && document.documentElement.innerHTML.includes('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') && window.location.href.endsWith('.pdf'))
+      );
+      // console.log(`CONTENT SCRIPT: checkIfPdf() evaluated: ${isPdf}, Path: ${window.location.pathname}, Type: ${document.contentType}`); // Keep for debugging if needed
+      return isPdf;
+    }
     
     // Create overlay for when scrolling is blocked
     const overlay = document.createElement('div');
@@ -264,8 +278,16 @@ export default defineContentScript({
           `;
           
           // Add to DOM
-          document.body.appendChild(modalOverlay);
-          console.log('CONTENT SCRIPT: Simplified pomodoro completion modal added to DOM.');
+          const isPdfPageForModal = checkIfPdf();
+          const parentElement = isPdfPageForModal ? document.documentElement : document.body;
+
+          if (parentElement) {
+            parentElement.appendChild(modalOverlay);
+            console.log(`CONTENT SCRIPT: Pomodoro completion modal added to ${isPdfPageForModal ? 'document.documentElement' : 'document.body'}.`);
+          } else {
+            console.error(`CONTENT SCRIPT: Could not find parentElement for completion modal. PDF: ${isPdfPageForModal}. Appending to body as fallback.`);
+            document.body.appendChild(modalOverlay); // Fallback
+          }
           
           // Simplified button handlers with minimal event listeners
           const stopBtn = document.getElementById('pomodoro-stop-btn-modal');
@@ -537,16 +559,9 @@ export default defineContentScript({
         pomodoroOverlay.style.cssText = cssText; // Apply the base CSS string
         
         // Detect PDF files - both local files and web-served PDFs
-        const isPdfFile = (
-          (window.location.protocol === 'file:' && window.location.pathname.endsWith('.pdf')) ||
-          window.location.pathname.endsWith('.pdf') ||
-          document.contentType === 'application/pdf' ||
-          document.querySelector('embed[type="application/pdf"]') !== null ||
-          document.querySelector('object[type="application/pdf"]') !== null ||
-          (document.body && document.body.children.length === 1 && document.body.children[0].tagName === 'EMBED' && (document.body.children[0] as HTMLEmbedElement).type === 'application/pdf') ||
-          (document.documentElement && document.documentElement.innerHTML.includes('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') && window.location.href.endsWith('.pdf'))
-        );
-        console.log(`CONTENT SCRIPT: PDF Detection: isPdfFile = ${isPdfFile}, Pathname: ${window.location.pathname}, ContentType: ${document.contentType}`);
+        const isPdfFile = checkIfPdf();
+        // The detailed log is now in checkIfPdf, so this one can be simpler or removed.
+        console.log(`CONTENT SCRIPT: createPomodoroOverlay: isPdfFile = ${isPdfFile}`);
 
         if (isPdfFile) {
           pomodoroOverlay.style.setProperty('position', 'fixed', 'important');
