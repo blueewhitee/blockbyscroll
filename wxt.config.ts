@@ -8,7 +8,7 @@ export default defineConfig({
   manifest: {
     name: 'NoMoScroll',
     description: 'Control scrolling on distracting websites to prevent doomscrolling',
-    version: '1.0.0',
+    version: '2.1.11',
     permissions: ['storage', 'tabs'],
     host_permissions: ['<all_urls>'], // Allow extension to run on any website
     action: {
@@ -22,6 +22,21 @@ export default defineConfig({
       "48": "icon/48.jpg",
       "96": "icon/96.jpg",
       "128": "icon/128.jpg"
-    }
-  }
+    },
+    commands: {
+      "toggle-pomodoro": {
+        suggested_key: {
+          default: "Alt+Shift+P",
+          windows: "Alt+Shift+P",
+          mac: "Alt+Shift+P",
+          linux: "Alt+Shift+P"
+        },
+        description: "Start or stop the Pomodoro timer"
+      }
+    },
+    // The content_scripts array previously here has been removed.
+    // WXT will auto-discover content scripts from the entrypoints/ directory.
+    // Ensure matching patterns (including for file://*/*) are defined
+    // by exporting a 'manifest' const from your 'entrypoints/content.ts' file.
+  },
 });
