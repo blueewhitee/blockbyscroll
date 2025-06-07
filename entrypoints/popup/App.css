@@ -1,3 +1,5 @@
+@import './background-animation.css';
+
 * { box-sizing: border-box; } /* Global box-sizing */
 
 :root {
@@ -6,14 +8,13 @@
   --danger-color: #a45d5d;
   --danger-hover: #8e4f4f;
   --background: #F7F9FA;
-  --text-color: #3a3a2c;
-  --secondary-text: #5e5e4c;
-  --text-shadow-soft: 1px 1px 3px rgba(0, 0, 0, 0.3);
+  --text-color: #ffffff;
+  --secondary-text: #e0e0e0;  --text-shadow-soft: 1px 1px 3px rgba(0, 0, 0, 0.3);
   --text-shadow-sharper: 1px 1px 2px rgba(0, 0, 0, 0.4);
-  --border-color: #E1E4E8;
-  --card-bg: #FFFFFF;
-  --input-bg: #FFFFFF;
-  --input-border: #D1D5DA;
+  --border-color: #3a3a4a;
+  --card-bg: rgba(255, 255, 255, 0.1);
+  --input-bg: rgba(255, 255, 255, 0.15);
+  --input-border: rgba(255, 255, 255, 0.3);
   --button-text: #FFFFFF;
   --success-color: #28A745;
   --progress-color: #7e8376;
@@ -28,11 +29,6 @@ body {
   font-family: 'Open Sans', sans-serif;
   font-weight: 400;
   color: var(--text-color);
-  background-image: url('/ChatGPT Image May 12, 2025, 10_29_58 PM.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
   overflow: hidden; /* Keep this here */
 }
 
@@ -42,7 +38,6 @@ body {
   min-height: 320px; /* Increased from 300px */
   display: flex;
   flex-direction: column;
-  background-color: rgba(255, 255, 255, 0.3);
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   position: relative;
@@ -55,11 +50,11 @@ header {
 
 h1 {
   margin: 0;
-  color: #4A7C4A;
+  color: #ffffff;
   font-size: 28px;
   font-family: Georgia, serif;
   font-weight: 700;
-  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.4);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .subtitle {
@@ -206,19 +201,18 @@ button {
   border-radius: 4px;
   padding: 8px;
   margin-bottom: 8px;
-  background-color: var(--background);
+  background-color: rgba(255, 255, 255, 0.08);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.site-item {
-  width: 30px;
+.site-item {  width: 30px;
   height: 30px;
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f0f0f0;
+  background-color: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   position: relative;
   cursor: pointer;
@@ -226,7 +220,7 @@ button {
 }
 
 .site-item:hover {
-  background-color: #e0e0e0;
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .site-favicon {
@@ -280,7 +274,7 @@ button {
   flex: 1;
   padding: 0.5em 0.75em;
   padding-right: 2.5em;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
   background-color: var(--card-bg);
@@ -321,7 +315,7 @@ button {
 .small-input {
   width: 60px;
   padding: 0.5em 0.75em;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
   background-color: var(--card-bg);

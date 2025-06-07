@@ -335,9 +335,8 @@ export default function App() {
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
   }
-
   return (
-    <div className="container">
+    <div className="container breathing-background">
       <header>
         <h1>NoMoScroll</h1>
         <p className="subtitle">Focus and control your browsing habits</p>
@@ -432,10 +431,9 @@ export default function App() {
                           position: 'absolute',
                           content: '""',
                           height: '12px',
-                          width: '12px',
-                          left: youtubeSettings.hideShorts ? '16px' : '2px',
+                          width: '12px',                          left: youtubeSettings.hideShorts ? '16px' : '2px',
                           bottom: '2px',
-                          backgroundColor: 'white',
+                          backgroundColor: '#ffffff',
                           borderRadius: '50%',
                           transition: '.3s'
                         }}
@@ -488,10 +486,9 @@ export default function App() {
                           position: 'absolute',
                           content: '""',
                           height: '12px',
-                          width: '12px',
-                          left: instagramSettings.hideReels ? '16px' : '2px',
+                          width: '12px',                          left: instagramSettings.hideReels ? '16px' : '2px',
                           bottom: '2px',
-                          backgroundColor: 'white',
+                          backgroundColor: '#ffffff',
                           borderRadius: '50%',
                           transition: '.3s'
                         }}
@@ -622,14 +619,14 @@ export default function App() {
               alignItems: 'center',
               zIndex: 1000,
             }}
-          >
-            <div 
+          >            <div 
               style={{
-                backgroundColor: 'white',
+                backgroundColor: 'rgba(26, 26, 46, 0.95)',
                 padding: '15px',
                 borderRadius: '8px',
                 width: '280px',
-                boxShadow: '0 3px 10px rgba(0,0,0,0.3)'
+                boxShadow: '0 3px 10px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
               }}
             >
               <h3 style={{margin: '0 0 10px'}}>Set Pomodoro Timer</h3>
@@ -698,23 +695,22 @@ export default function App() {
               alignItems: 'center',
               zIndex: 1000,
             }}
-          >
-            <div 
+          >            <div 
               style={{
-                backgroundColor: 'white',
+                backgroundColor: 'rgba(26, 26, 46, 0.95)',
                 padding: '25px',
                 borderRadius: '12px',
                 width: '350px',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                textAlign: 'center'
+                textAlign: 'center',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
               }}
             >
               <div style={{fontSize: '48px', marginBottom: '15px'}}>🎉</div>
-              <h2 style={{margin: '0 0 10px', color: '#333', fontSize: '22px', fontWeight: '600'}}>Pomodoro Complete!</h2>
-              <p style={{margin: '0 0 20px', fontSize: '15px', color: '#555', lineHeight: '1.5'}}>
+              <h2 style={{margin: '0 0 10px', color: '#ffffff', fontSize: '22px', fontWeight: '600'}}>Pomodoro Complete!</h2>              <p style={{margin: '0 0 20px', fontSize: '15px', color: '#e0e0e0', lineHeight: '1.5'}}>
                 Great work! You've completed your {completedPomodoroDuration}-minute pomodoro session.
               </p>
-              <p style={{margin: '0 0 25px', fontSize: '14px', color: '#666'}}>
+              <p style={{margin: '0 0 25px', fontSize: '14px', color: '#cccccc'}}>
                 Would you like to take a {Math.round(completedPomodoroDuration / 5) || 5}-minute break or stop the timer?
               </p>
               <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
@@ -775,17 +771,17 @@ export default function App() {
               alignItems: 'center',
               zIndex: 1000,
             }}
-          >
-            <div 
+          >            <div 
               style={{
-                backgroundColor: 'white',
+                backgroundColor: 'rgba(26, 26, 46, 0.95)',
                 padding: '15px',
                 borderRadius: '8px',
                 width: '280px',
-                boxShadow: '0 3px 10px rgba(0,0,0,0.3)'
+                boxShadow: '0 3px 10px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
               }}
             >
-              <h3 style={{margin: '0 0 10px'}}>Custom limit for {editingSite}</h3>
+              <h3 style={{margin: '0 0 10px', color: '#ffffff'}}>Custom limit for {editingSite}</h3>
               <p style={{margin: '0 0 15px', fontSize: '13px'}}>
                 Set a custom scroll limit for this site or leave empty to use the global limit.
               </p>
@@ -845,15 +841,14 @@ export default function App() {
                           transition: '.4s'
                         }}
                       >
-                        <span 
-                          style={{
+                        <span                          style={{
                             position: 'absolute',
                             content: '""',
                             height: '16px',
                             width: '16px',
                             left: youtubeSettings.hideShorts ? '22px' : '2px',
                             bottom: '2px',
-                            backgroundColor: 'white',
+                            backgroundColor: '#ffffff',
                             borderRadius: '50%',
                             transition: '.4s'
                           }}
@@ -899,15 +894,14 @@ export default function App() {
                           transition: '.4s'
                         }}
                       >
-                        <span 
-                          style={{
+                        <span                          style={{
                             position: 'absolute',
                             content: '""',
                             height: '16px',
                             width: '16px',
                             left: youtubeSettings.hideHomeFeed ? '22px' : '2px',
                             bottom: '2px',
-                            backgroundColor: 'white',
+                            backgroundColor: '#ffffff',
                             borderRadius: '50%',
                             transition: '.4s'
                           }}
