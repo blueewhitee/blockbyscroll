@@ -30,7 +30,7 @@ export default defineBackground(() => {
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
-      const defaultSites: string[] = ['youtube.com', 'x.com', 'reddit.com']; // Added type
+      const defaultSites: string[] = ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
       // Initialize with an empty object for domain-specific scroll counts
       const scrollCounts: Record<string, number> = {}; // Added type
       
@@ -163,7 +163,7 @@ export default defineBackground(() => {
       
       // Get current settings first
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
         const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         
         // Reset all domain-specific counters
@@ -389,7 +389,7 @@ export default defineBackground(() => {
       pomodoroTimer = setTimeout(() => {
         // When break is done
         browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
           const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
           const resetTime = Date.now();
           
@@ -702,7 +702,7 @@ export default defineBackground(() => {
       
       // Reset counters
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
         const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         const resetTime = Date.now();
         
@@ -929,7 +929,7 @@ export default defineBackground(() => {
       const resetInterval: number = result.resetInterval || 0; // Added type
       const lastResetTime: number = result.lastResetTime || Date.now(); // Added type
       const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
-      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
       
       console.log(`Reset check - interval: ${resetInterval}min, scrollCounts:`, scrollCounts);
       

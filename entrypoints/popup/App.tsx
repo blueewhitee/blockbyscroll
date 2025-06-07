@@ -9,7 +9,7 @@ export default function App() {
   const [scrollCounts, setScrollCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveStatus, setSaveStatus] = useState<string>('');
-  const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com']);
+  const [distractingSites, setDistractingSites] = useState<string[]>(['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com', 'instagram.com']);
   const [newSite, setNewSite] = useState<string>('');
   const [resetInterval, setResetInterval] = useState<number>(0);
   const [customLimits, setCustomLimits] = useState<Record<string, number>>({});
@@ -65,7 +65,7 @@ export default function App() {
         const loadedScrollCounts = settings.scrollCounts || {};
         setScrollCounts(loadedScrollCounts);
         
-        const loadedDistractingSites = settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com'];
+        const loadedDistractingSites = settings.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com'];
         setDistractingSites(loadedDistractingSites);
         
         // Load custom limits if they exist
@@ -386,116 +386,122 @@ export default function App() {
             />
             <span style={{ fontSize: '12px', color: 'var(--secondary-text)', marginLeft: '4px' }}>minutes</span>
           </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderLeft: '1px solid var(--border-color)', paddingLeft: '15px' }}>
-            {/* YouTube Shorts Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <img 
-                src={getFaviconUrl('youtube.com')} 
-                alt="YouTube" 
-                style={{ width: '16px', height: '16px' }}
-              />
-              <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Shorts</span>
-              <div 
-                onClick={() => handleYoutubeSettingToggle('hideShorts')}
-                style={{
-                  position: 'relative',
-                  display: 'inline-block',
-                  width: '30px',
-                  height: '16px',
-                  cursor: 'pointer'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={youtubeSettings.hideShorts}
-                  onChange={() => {}}
-                  style={{ opacity: 0, width: 0, height: 0 }}
-                />
-                <span 
-                  style={{
-                    position: 'absolute',
-                    cursor: 'pointer',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: youtubeSettings.hideShorts ? 'var(--primary-color)' : '#ccc',
-                    borderRadius: '16px',
-                    transition: '.3s'
-                  }}
-                >
-                  <span 
-                    style={{
-                      position: 'absolute',
-                      content: '""',
-                      height: '12px',
-                      width: '12px',
-                      left: youtubeSettings.hideShorts ? '16px' : '2px',
-                      bottom: '2px',
-                      backgroundColor: 'white',
-                      borderRadius: '50%',
-                      transition: '.3s'
-                    }}
+            {/* Only show toggle section if at least one site is in the blocklist */}
+          {(distractingSites.some(site => site.includes('youtube.com')) || distractingSites.some(site => site.includes('instagram.com'))) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderLeft: '1px solid var(--border-color)', paddingLeft: '15px' }}>
+              {/* YouTube Shorts Toggle - only show if youtube.com is in distractingSites */}
+              {distractingSites.some(site => site.includes('youtube.com')) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <img 
+                    src={getFaviconUrl('youtube.com')} 
+                    alt="YouTube" 
+                    style={{ width: '16px', height: '16px' }}
                   />
-                </span>
-              </div>
-            </div>
+                  <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Shorts</span>
+                  <div 
+                    onClick={() => handleYoutubeSettingToggle('hideShorts')}
+                    style={{
+                      position: 'relative',
+                      display: 'inline-block',
+                      width: '30px',
+                      height: '16px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={youtubeSettings.hideShorts}
+                      onChange={() => {}}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span 
+                      style={{
+                        position: 'absolute',
+                        cursor: 'pointer',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: youtubeSettings.hideShorts ? 'var(--primary-color)' : '#ccc',
+                        borderRadius: '16px',
+                        transition: '.3s'
+                      }}
+                    >
+                      <span 
+                        style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '12px',
+                          width: '12px',
+                          left: youtubeSettings.hideShorts ? '16px' : '2px',
+                          bottom: '2px',
+                          backgroundColor: 'white',
+                          borderRadius: '50%',
+                          transition: '.3s'
+                        }}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
 
-            {/* Instagram Reels Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <img 
-                src={getFaviconUrl('instagram.com')} 
-                alt="Instagram" 
-                style={{ width: '16px', height: '16px' }}
-              />
-              <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Reels</span>
-              <div 
-                onClick={() => handleInstagramSettingToggle('hideReels')}
-                style={{
-                  position: 'relative',
-                  display: 'inline-block',
-                  width: '30px',
-                  height: '16px',
-                  cursor: 'pointer'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={instagramSettings.hideReels}
-                  onChange={() => {}}
-                  style={{ opacity: 0, width: 0, height: 0 }}
-                />
-                <span 
-                  style={{
-                    position: 'absolute',
-                    cursor: 'pointer',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: instagramSettings.hideReels ? 'var(--primary-color)' : '#ccc',
-                    borderRadius: '16px',
-                    transition: '.3s'
-                  }}
-                >
-                  <span 
-                    style={{
-                      position: 'absolute',
-                      content: '""',
-                      height: '12px',
-                      width: '12px',
-                      left: instagramSettings.hideReels ? '16px' : '2px',
-                      bottom: '2px',
-                      backgroundColor: 'white',
-                      borderRadius: '50%',
-                      transition: '.3s'
-                    }}
+              {/* Instagram Reels Toggle - only show if instagram.com is in distractingSites */}
+              {distractingSites.some(site => site.includes('instagram.com')) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <img 
+                    src={getFaviconUrl('instagram.com')} 
+                    alt="Instagram" 
+                    style={{ width: '16px', height: '16px' }}
                   />
-                </span>
-              </div>
+                  <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Reels</span>
+                  <div 
+                    onClick={() => handleInstagramSettingToggle('hideReels')}
+                    style={{
+                      position: 'relative',
+                      display: 'inline-block',
+                      width: '30px',
+                      height: '16px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={instagramSettings.hideReels}
+                      onChange={() => {}}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span 
+                      style={{
+                        position: 'absolute',
+                        cursor: 'pointer',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: instagramSettings.hideReels ? 'var(--primary-color)' : '#ccc',
+                        borderRadius: '16px',
+                        transition: '.3s'
+                      }}
+                    >
+                      <span 
+                        style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '12px',
+                          width: '12px',
+                          left: instagramSettings.hideReels ? '16px' : '2px',
+                          bottom: '2px',
+                          backgroundColor: 'white',
+                          borderRadius: '50%',
+                          transition: '.3s'
+                        }}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
       

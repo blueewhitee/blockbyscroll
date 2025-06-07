@@ -25,7 +25,7 @@ export default defineContentScript({
     let scrollCount = 0;
     let maxScrolls = 30; // Default value to 30
     let isBlocked = false;
-    let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Default sites
+    let distractingSites = ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
@@ -731,7 +731,7 @@ export default defineContentScript({
       const result = await browser.storage.sync.get({
         maxScrolls: 30, // Fallback to 30
         scrollCounts: {}, // New object structure for per-domain counts
-        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Fallback
+        distractingSites: ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com'], // Fallback
         resetInterval: 0,
         lastResetTime: Date.now(),        customLimits: {}, // Custom scroll limits per domain
         youtubeSettings: { hideShorts: false, hideHomeFeed: false }, // YouTube-specific settings
