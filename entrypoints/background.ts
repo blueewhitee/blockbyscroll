@@ -44,11 +44,13 @@ export default defineBackground(() => {
         scrollCounts: scrollCounts,  // Object to track per-domain scrolls
         distractingSites: defaultSites, // Default sites
         resetInterval: 30, // Default to 30 minutes for auto reset
-        lastResetTime: Date.now(), // Track when the counter was last reset
-        customLimits: {}, // Store custom limits per domain
+        lastResetTime: Date.now(), // Track when the counter was last reset        customLimits: {}, // Store custom limits per domain
         youtubeSettings: {  // YouTube-specific settings
           hideShorts: false,
           hideHomeFeed: false
+        },
+        instagramSettings: {  // Instagram-specific settings
+          hideReels: false
         }
       });
       console.log('ScrollStop: Default settings initialized');
@@ -124,17 +126,17 @@ export default defineBackground(() => {
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings']).then(sendResponse);
       return true; // Required for async response
     }
     
-    if (message.type === 'SAVE_SETTINGS') {
-      browser.storage.sync.set({ 
+    if (message.type === 'SAVE_SETTINGS') {      browser.storage.sync.set({ 
         maxScrolls: message.maxScrolls,
         distractingSites: message.distractingSites,
         resetInterval: message.resetInterval,
         customLimits: message.customLimits || {},
-        youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
+        youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
+        instagramSettings: message.instagramSettings || { hideReels: false }
       }).then(() => {
         // Notify content script about updated settings
         updateAllContentScripts({
@@ -143,7 +145,8 @@ export default defineBackground(() => {
           distractingSites: message.distractingSites,
           resetInterval: message.resetInterval,
           customLimits: message.customLimits || {},
-          youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
+          youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
+          instagramSettings: message.instagramSettings || { hideReels: false }
         });
         
         sendResponse({ success: true });

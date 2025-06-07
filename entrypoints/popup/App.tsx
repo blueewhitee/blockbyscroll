@@ -14,11 +14,13 @@ export default function App() {
   const [resetInterval, setResetInterval] = useState<number>(0);
   const [customLimits, setCustomLimits] = useState<Record<string, number>>({});
   const [editingSite, setEditingSite] = useState<string | null>(null);
-  const [customLimitInput, setCustomLimitInput] = useState<string>('');
-  const [youtubeSettings, setYoutubeSettings] = useState<{
+  const [customLimitInput, setCustomLimitInput] = useState<string>('');  const [youtubeSettings, setYoutubeSettings] = useState<{
     hideShorts: boolean;
     hideHomeFeed: boolean;
   }>({ hideShorts: false, hideHomeFeed: false });
+  const [instagramSettings, setInstagramSettings] = useState<{
+    hideReels: boolean;
+  }>({ hideReels: false });
   const [editMode, setEditMode] = useState<boolean>(false);
   const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
@@ -70,10 +72,14 @@ export default function App() {
         if (settings.customLimits) {
           setCustomLimits(settings.customLimits);
         }
-        
-        // Load YouTube settings if they exist
+          // Load YouTube settings if they exist
         if (settings.youtubeSettings) {
           setYoutubeSettings(settings.youtubeSettings);
+        }
+        
+        // Load Instagram settings if they exist
+        if (settings.instagramSettings) {
+          setInstagramSettings(settings.instagramSettings);
         }
         
         setResetInterval(settings.resetInterval || 0);
@@ -123,9 +129,13 @@ export default function App() {
   const handleCustomLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCustomLimitInput(e.target.value);
   };
-
   const handleYoutubeSettingToggle = (setting: 'hideShorts' | 'hideHomeFeed') => {
     setYoutubeSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
+  };  const handleInstagramSettingToggle = (setting: 'hideReels') => {
+    setInstagramSettings(prev => ({
       ...prev,
       [setting]: !prev[setting]
     }));
@@ -150,11 +160,11 @@ export default function App() {
         type: 'SAVE_SETTINGS',
         maxScrolls,
         distractingSites,
-        resetInterval,
-        customLimits: !isNaN(limit) && limit > 0 ? 
+        resetInterval,        customLimits: !isNaN(limit) && limit > 0 ? 
           {...customLimits, [editingSite]: limit} : 
           {...customLimits},
-        youtubeSettings
+        youtubeSettings,
+        instagramSettings
       })
       .then(() => {
         setSaveStatus('Saved!');
@@ -179,13 +189,13 @@ export default function App() {
 
     const scrollsToSave = currentNumVal;
 
-    browser.runtime.sendMessage({
-      type: 'SAVE_SETTINGS',
+    browser.runtime.sendMessage({      type: 'SAVE_SETTINGS',
       maxScrolls: scrollsToSave,
       distractingSites,
       resetInterval,
       customLimits,
-      youtubeSettings 
+      youtubeSettings,
+      instagramSettings
     })
       .then(() => {
         setSaveStatus('Saved!');
@@ -362,21 +372,130 @@ export default function App() {
         <p style={{fontSize: '12px', color: 'var(--secondary-text)', margin: '4px 0'}}>
           Click a site icon to set custom limits.
         </p>
-      </div>
-
-      <div className="settings-group">
+      </div>      <div className="settings-group">
         <label htmlFor="reset-interval">Auto-reset counter after:</label>
-        <div className="inline-input">
-          <input
-            id="reset-interval"
-            type="number"
-            min="0"
-            value={resetInterval}
-            onChange={(e) => handleResetIntervalChange(Math.max(0, parseInt(e.target.value) || 0))}
-            className="small-input"
-          />
-          <span className="unit-text">minutes</span>
-          <span className="info-text">(0 = no auto reset)</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <div className="inline-input" style={{ flex: '0 0 auto' }}>
+            <input
+              id="reset-interval"
+              type="number"
+              min="0"
+              value={resetInterval}
+              onChange={(e) => handleResetIntervalChange(Math.max(0, parseInt(e.target.value) || 0))}
+              style={{ width: '60px', fontSize: '14px' }}
+            />
+            <span style={{ fontSize: '12px', color: 'var(--secondary-text)', marginLeft: '4px' }}>minutes</span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderLeft: '1px solid var(--border-color)', paddingLeft: '15px' }}>
+            {/* YouTube Shorts Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <img 
+                src={getFaviconUrl('youtube.com')} 
+                alt="YouTube" 
+                style={{ width: '16px', height: '16px' }}
+              />
+              <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Shorts</span>
+              <div 
+                onClick={() => handleYoutubeSettingToggle('hideShorts')}
+                style={{
+                  position: 'relative',
+                  display: 'inline-block',
+                  width: '30px',
+                  height: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={youtubeSettings.hideShorts}
+                  onChange={() => {}}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span 
+                  style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: youtubeSettings.hideShorts ? 'var(--primary-color)' : '#ccc',
+                    borderRadius: '16px',
+                    transition: '.3s'
+                  }}
+                >
+                  <span 
+                    style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '12px',
+                      width: '12px',
+                      left: youtubeSettings.hideShorts ? '16px' : '2px',
+                      bottom: '2px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      transition: '.3s'
+                    }}
+                  />
+                </span>
+              </div>
+            </div>
+
+            {/* Instagram Reels Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <img 
+                src={getFaviconUrl('instagram.com')} 
+                alt="Instagram" 
+                style={{ width: '16px', height: '16px' }}
+              />
+              <span style={{ fontSize: '13px', color: 'var(--text-color)', whiteSpace: 'nowrap' }}>Block Reels</span>
+              <div 
+                onClick={() => handleInstagramSettingToggle('hideReels')}
+                style={{
+                  position: 'relative',
+                  display: 'inline-block',
+                  width: '30px',
+                  height: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={instagramSettings.hideReels}
+                  onChange={() => {}}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span 
+                  style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: instagramSettings.hideReels ? 'var(--primary-color)' : '#ccc',
+                    borderRadius: '16px',
+                    transition: '.3s'
+                  }}
+                >
+                  <span 
+                    style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '12px',
+                      width: '12px',
+                      left: instagramSettings.hideReels ? '16px' : '2px',
+                      bottom: '2px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      transition: '.3s'
+                    }}
+                  />
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
