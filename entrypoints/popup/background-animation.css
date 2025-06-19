@@ -1,64 +1,63 @@
-/* Breathing Gradient Background Animation */
-/* Creates a calming, meditative breathing effect that promotes focus */
+/* Modern Green-tinted Background Theme */
+/* Subtle, sophisticated breathing effect with green undertones */
 
 @keyframes breathingGradient {
   0% {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: #f8fdf9;
   }
   50% {
-    background: linear-gradient(135deg, #1f1f33 0%, #1b2543 100%);
+    background: #f5fcf6;
   }
   100% {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: #f8fdf9;
   }
 }
 
 .breathing-background {
   animation: breathingGradient 45s ease-in-out infinite;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: #f8fdf9;
   background-size: 100% 100%;
 }
 
 /* Alternative breathing pattern for variety (60 second cycle) */
 @keyframes breathingGradientSlow {
   0% {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: #f8fdf9;
   }
   25% {
-    background: linear-gradient(135deg, #1c1c30 0%, #182340 100%);
+    background: #f6fcf7;
   }
   50% {
-    background: linear-gradient(135deg, #1f1f33 0%, #1b2543 100%);
+    background: #f3fbf4;
   }
   75% {
-    background: linear-gradient(135deg, #1c1c30 0%, #182340 100%);
+    background: #f6fcf7;
   }
   100% {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: #f8fdf9;
   }
 }
 
 .breathing-background-slow {
   animation: breathingGradientSlow 60s ease-in-out infinite;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: #f8fdf9;
   background-size: 100% 100%;
 }
 
 /* Subtle variant with even more gradual transitions */
 @keyframes breathingGradientGentle {
   0%, 100% {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  }
+    background: #f8fdf9;  }
   33% {
-    background: linear-gradient(135deg, #1b1b2f 0%, #17223f 100%);
+    background: #f6fcf7;
   }
   66% {
-    background: linear-gradient(135deg, #1d1d31 0%, #192441 100%);
+    background: #f4fbf5;
   }
 }
 
 .breathing-background-gentle {
   animation: breathingGradientGentle 50s ease-in-out infinite;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: #f8fdf9;
   background-size: 100% 100%;
 }

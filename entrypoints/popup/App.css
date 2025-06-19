@@ -3,21 +3,22 @@
 * { box-sizing: border-box; } /* Global box-sizing */
 
 :root {
-  --primary-color: #6c8a6e;
-  --primary-hover: #4B6A4D;
-  --danger-color: #a45d5d;
-  --danger-hover: #8e4f4f;
-  --background: #F7F9FA;
-  --text-color: #ffffff;
-  --secondary-text: #e0e0e0;  --text-shadow-soft: 1px 1px 3px rgba(0, 0, 0, 0.3);
-  --text-shadow-sharper: 1px 1px 2px rgba(0, 0, 0, 0.4);
-  --border-color: #3a3a4a;
-  --card-bg: rgba(255, 255, 255, 0.1);
-  --input-bg: rgba(255, 255, 255, 0.15);
-  --input-border: rgba(255, 255, 255, 0.3);
-  --button-text: #FFFFFF;
-  --success-color: #28A745;
-  --progress-color: #7e8376;
+  --primary-color: #17994c;
+  --primary-hover: #138a42;
+  --danger-color: #dc3545;
+  --danger-hover: #c82333;
+  --background: #f8fdf9;
+  --text-color: #0d2b17;
+  --secondary-text: #4a6741;
+  --text-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --text-shadow-sharper: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --border-color: #e1f2e4;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #d1e7d6;
+  --button-text: #0d2b17;
+  --success-color: #17994c;
+  --progress-color: #17994c;
 }
 
 html {
@@ -30,6 +31,7 @@ body {
   font-weight: 400;
   color: var(--text-color);
   overflow: hidden; /* Keep this here */
+  background-color: var(--background);
 }
 
 .container {
@@ -38,9 +40,11 @@ body {
   min-height: 320px; /* Increased from 300px */
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(23, 153, 76, 0.1), 0 2px 4px -1px rgba(23, 153, 76, 0.06);
   position: relative;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
 }
 
 header {
@@ -50,19 +54,19 @@ header {
 
 h1 {
   margin: 0;
-  color: #ffffff;
+  color: var(--primary-color);
   font-size: 28px;
   font-family: Georgia, serif;
   font-weight: 700;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  text-shadow: none;
 }
 
 .subtitle {
   margin: 0;
   color: var(--secondary-text);
   font-size: 14px;
-  text-shadow: var(--text-shadow-sharper);
-  font-weight: 600;
+  text-shadow: none;
+  font-weight: 500;
 }
 
 .stat-card {
@@ -70,6 +74,8 @@ h1 {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 24px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px 0 rgba(23, 153, 76, 0.08), 0 1px 2px 0 rgba(23, 153, 76, 0.04);
 }
 
 .stat-label {
@@ -88,7 +94,7 @@ h1 {
 
 .progress-bar {
   height: 6px;
-  background-color: var(--border-color);
+  background-color: #ecf7ee;
   border-radius: 4px;
   overflow: hidden;
 }
@@ -114,12 +120,19 @@ h1 {
 .settings-group input {
   width: 100%;
   padding: 0.5em 0.75em;
-  border-radius: 4px;
-  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
   font-size: 16px;
   box-sizing: border-box;
-  background-color: var(--card-bg);
+  background-color: var(--input-bg);
   color: var(--text-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(23, 153, 76, 0.1);
 }
 
 .status-message {
@@ -140,40 +153,47 @@ h1 {
 
 button {
   flex: 1;
-  padding: 10px 0;
-  border-radius: 4px;
+  padding: 12px 0;
+  border-radius: 6px;
   border: none;
   font-size: 14px;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .save-button {
   background-color: var(--primary-color);
   color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .save-button:hover {
   background-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .reset-button {
   background-color: var(--danger-color);
   color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .reset-button:hover {
   background-color: var(--danger-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .info-box {
-  background-color: var(--card-bg);
+  background-color: #f0f9f2;
   border-radius: 8px;
   padding: 12px;
   font-size: 12px;
   color: var(--secondary-text);
   line-height: 1.5;
+  border: 1px solid #d4ebda;
 }
 
 .info-box p {
@@ -198,10 +218,10 @@ button {
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 8px;
   margin-bottom: 8px;
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: #f4fbf5;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -212,15 +232,19 @@ button {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   position: relative;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .site-item:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: #ecf7ee;
+  border-color: #c6e2cc;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px 0 rgba(23, 153, 76, 0.15);
 }
 
 .site-favicon {
@@ -274,11 +298,18 @@ button {
   flex: 1;
   padding: 0.5em 0.75em;
   padding-right: 2.5em;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
   font-size: 14px;
-  background-color: var(--card-bg);
+  background-color: var(--input-bg);
   color: var(--text-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.add-site input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(23, 153, 76, 0.1);
 }
 
 .add-site-plus-button {
@@ -288,9 +319,9 @@ button {
   bottom: 0;
   margin: auto 0;
   background-color: var(--primary-color);
-  color: var(--button-text);
+  color: white;
   border: none;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 6px 6px 0;
   padding: 0 0.8em;
   cursor: pointer;
   font-size: 1.2em;
@@ -300,10 +331,12 @@ button {
   justify-content: center;
   line-height: 1;
   height: 100%;
+  transition: all 0.2s ease;
 }
 
 .add-site-plus-button:hover {
   background-color: var(--primary-hover);
+  transform: scale(1.05);
 }
 
 .inline-input {
@@ -315,24 +348,31 @@ button {
 .small-input {
   width: 60px;
   padding: 0.5em 0.75em;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
   font-size: 14px;
-  background-color: var(--card-bg);
+  background-color: var(--input-bg);
   color: var(--text-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.small-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(23, 153, 76, 0.1);
 }
 
 .unit-text {
   font-size: 14px;
   color: var(--secondary-text);
-  text-shadow: var(--text-shadow-sharper);
-  font-weight: 600;
+  text-shadow: none;
+  font-weight: 500;
 }
 
 .info-text {
   font-size: 12px;
   color: var(--secondary-text);
   margin-left: 4px;
-  text-shadow: var(--text-shadow-sharper);
-  font-weight: 600;
+  text-shadow: none;
+  font-weight: 500;
 }

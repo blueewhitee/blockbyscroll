@@ -230,13 +230,12 @@ export default function App() {
         .then(() => {
           console.log('Pomodoro timer started successfully');
           setSaveStatus(`Pomodoro set for ${minutes} minutes!`);
-          
-          const successMessage = document.createElement('div');
+            const successMessage = document.createElement('div');
           successMessage.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background-color: rgba(76, 175, 80, 0.95); color: white; padding: 20px;
             border-radius: 10px; text-align: center; font-weight: bold;
-            z-index: 10000; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 10000; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
           `;
           successMessage.innerHTML = `
             <div style="font-size: 48px; margin-bottom: 10px;">🍅</div>
@@ -603,9 +602,7 @@ export default function App() {
           >
             {editMode ? 'Done' : 'Edit'}
           </button>
-        </div>
-
-        {showPomodoroPopup && (
+        </div>        {showPomodoroPopup && (
           <div 
             style={{
               position: 'fixed',
@@ -613,7 +610,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
+              backgroundColor: 'rgba(0,0,0,0.3)',
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
@@ -621,16 +618,15 @@ export default function App() {
             }}
           >            <div 
               style={{
-                backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                backgroundColor: '#ffffff',
                 padding: '15px',
                 borderRadius: '8px',
                 width: '280px',
-                boxShadow: '0 3px 10px rgba(0,0,0,0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.2)'
+                boxShadow: '0 3px 10px rgba(0,0,0,0.2)',
+                border: '1px solid #dddddd'
               }}
-            >
-              <h3 style={{margin: '0 0 10px'}}>Set Pomodoro Timer</h3>
-              <p style={{margin: '0 0 15px', fontSize: '13px'}}>
+            >              <h3 style={{margin: '0 0 10px', color: '#333333'}}>Set Pomodoro Timer</h3>
+              <p style={{margin: '0 0 15px', fontSize: '13px', color: '#666666'}}>
                 Set your focus time in minutes.
               </p>
               <input
@@ -679,9 +675,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        )}
-
-        {showPomodoroCompletePopup && (
+        )}        {showPomodoroCompletePopup && (
           <div 
             style={{
               position: 'fixed',
@@ -689,7 +683,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.8)',
+              backgroundColor: 'rgba(0,0,0,0.3)',
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
@@ -697,17 +691,17 @@ export default function App() {
             }}
           >            <div 
               style={{
-                backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                backgroundColor: '#ffffff',
                 padding: '25px',
                 borderRadius: '12px',
                 width: '350px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
                 textAlign: 'center',
-                border: '1px solid rgba(255, 255, 255, 0.2)'
+                border: '1px solid #dddddd'
               }}
             >
               <div style={{fontSize: '48px', marginBottom: '15px'}}>🎉</div>
-              <h2 style={{margin: '0 0 10px', color: '#ffffff', fontSize: '22px', fontWeight: '600'}}>Pomodoro Complete!</h2>              <p style={{margin: '0 0 20px', fontSize: '15px', color: '#e0e0e0', lineHeight: '1.5'}}>
+              <h2 style={{margin: '0 0 10px', color: '#333333', fontSize: '22px', fontWeight: '600'}}>Pomodoro Complete!</h2>              <p style={{margin: '0 0 20px', fontSize: '15px', color: '#666666', lineHeight: '1.5'}}>
                 Great work! You've completed your {completedPomodoroDuration}-minute pomodoro session.
               </p>
               <p style={{margin: '0 0 25px', fontSize: '14px', color: '#cccccc'}}>
