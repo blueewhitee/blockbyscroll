@@ -1,63 +1,63 @@
-/* Modern Green-tinted Background Theme */
-/* Subtle, sophisticated breathing effect with green undertones */
+/* Premium Productivity Theme */
+/* Sophisticated, calming gradient animations for focus and productivity */
 
 @keyframes breathingGradient {
   0% {
-    background: #f8fdf9;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   }
   50% {
-    background: #f5fcf6;
+    background: linear-gradient(135deg, #f1f5f9 0%, #eef2ff 100%);
   }
   100% {
-    background: #f8fdf9;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   }
 }
 
 .breathing-background {
-  animation: breathingGradient 45s ease-in-out infinite;
-  background: #f8fdf9;
+  animation: breathingGradient 60s ease-in-out infinite;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   background-size: 100% 100%;
 }
 
-/* Alternative breathing pattern for variety (60 second cycle) */
+/* Alternative breathing pattern for variety (90 second cycle) */
 @keyframes breathingGradientSlow {
   0% {
-    background: #f8fdf9;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   }
   25% {
-    background: #f6fcf7;
+    background: linear-gradient(135deg, #f1f5f9 0%, #eef2ff 100%);
   }
   50% {
-    background: #f3fbf4;
+    background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
   }
   75% {
-    background: #f6fcf7;
+    background: linear-gradient(135deg, #faf5ff 0%, #f1f5f9 100%);
   }
   100% {
-    background: #f8fdf9;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   }
 }
 
 .breathing-background-slow {
-  animation: breathingGradientSlow 60s ease-in-out infinite;
-  background: #f8fdf9;
+  animation: breathingGradientSlow 90s ease-in-out infinite;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   background-size: 100% 100%;
 }
 
 /* Subtle variant with even more gradual transitions */
 @keyframes breathingGradientGentle {
   0%, 100% {
-    background: #f8fdf9;  }
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);  }
   33% {
-    background: #f6fcf7;
+    background: linear-gradient(135deg, #f1f5f9 0%, #eef2ff 100%);
   }
   66% {
-    background: #f4fbf5;
+    background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
   }
 }
 
 .breathing-background-gentle {
-  animation: breathingGradientGentle 50s ease-in-out infinite;
-  background: #f8fdf9;
+  animation: breathingGradientGentle 75s ease-in-out infinite;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   background-size: 100% 100%;
 }

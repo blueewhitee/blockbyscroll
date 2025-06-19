@@ -371,8 +371,7 @@ export default function App() {
           Click a site icon to set custom limits.
         </p>
       </div>      <div className="settings-group">
-        <label htmlFor="reset-interval">Auto-reset counter after:</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+        <label htmlFor="reset-interval">Auto-reset counter after:</label>        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
           <div className="inline-input" style={{ flex: '0 0 auto' }}>
             <input
               id="reset-interval"
@@ -380,9 +379,10 @@ export default function App() {
               min="0"
               value={resetInterval}
               onChange={(e) => handleResetIntervalChange(Math.max(0, parseInt(e.target.value) || 0))}
-              style={{ width: '60px', fontSize: '14px' }}
+              className="small-input"
+              style={{ width: '80px', fontSize: '14px', fontWeight: '600' }}
             />
-            <span style={{ fontSize: '12px', color: 'var(--secondary-text)', marginLeft: '4px' }}>minutes</span>
+            <span style={{ fontSize: '12px', color: 'var(--secondary-text)', marginLeft: '6px' }}>minutes</span>
           </div>
             {/* Only show toggle section if at least one site is in the blocklist */}
           {(distractingSites.some(site => site.includes('youtube.com')) || distractingSites.some(site => site.includes('instagram.com'))) && (
@@ -628,19 +628,21 @@ export default function App() {
             >              <h3 style={{margin: '0 0 10px', color: '#333333'}}>Set Pomodoro Timer</h3>
               <p style={{margin: '0 0 15px', fontSize: '13px', color: '#666666'}}>
                 Set your focus time in minutes.
-              </p>
-              <input
+              </p>              <input
                 type="number"
                 min="1"
                 value={pomodoroMinutes}
                 onChange={(e) => setPomodoroMinutes(e.target.value)}
                 placeholder="Enter minutes"
+                className="small-input"
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '12px',
                   marginBottom: '15px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border-color)'
+                  borderRadius: '8px',
+                  border: '2px solid var(--border-color)',
+                  fontSize: '14px',
+                  fontWeight: '600'
                 }}
               />
 
@@ -778,19 +780,23 @@ export default function App() {
               <h3 style={{margin: '0 0 10px', color: '#ffffff'}}>Custom limit for {editingSite}</h3>
               <p style={{margin: '0 0 15px', fontSize: '13px'}}>
                 Set a custom scroll limit for this site or leave empty to use the global limit.
-              </p>
-              <input
+              </p>              <input
                 type="number"
                 min="1"
                 value={customLimitInput}
                 onChange={handleCustomLimitChange}
                 placeholder="Enter custom limit"
+                className="small-input"
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '12px',
                   marginBottom: '15px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border-color)'
+                  borderRadius: '8px',
+                  border: '2px solid rgba(255, 255, 255, 0.3)',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  color: '#ffffff'
                 }}
               />
               
