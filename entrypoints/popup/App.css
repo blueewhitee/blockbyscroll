@@ -161,17 +161,26 @@ h1 {
   border: 2px solid var(--input-border);
   font-size: 16px;
   box-sizing: border-box;
-  background-color: var(--input-bg);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 242, 255, 0.95));
   color: var(--text-color);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-weight: 500;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
 }
 
 .settings-group input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(79, 70, 229, 0.15);
   transform: translateY(-1px);
+  background: linear-gradient(135deg, #ffffff, #f8faff);
+}
+
+.settings-group input:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
 }
 
 .status-message {
@@ -491,4 +500,53 @@ input[type="number"] {
 .inline-input span {
   font-weight: 500;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Inline layout for Global scroll limit and Auto-reset counter */
+.settings-inline-group {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  align-items: flex-end; /* Align items to the bottom for a clean row */
+}
+
+.settings-inline-group .settings-group {
+  flex: 1; /* Make both groups take equal width */
+  margin-bottom: 0;
+}
+
+.settings-inline-group .inline-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-inline-group .inline-input input {
+  flex: 1; /* Make input fields expand equally */
+  width: 100%; /* Fallback */
+  min-width: 0; /* Allow input to shrink */
+}
+
+.input-with-unit {
+  position: relative;
+  display: flex;
+  flex: 1;
+}
+
+.input-with-unit::after {
+  content: 'minutes';
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--secondary-text);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.input-with-unit input {
+  padding-right: 80px; /* Add space for the unit text */
+  text-align: right; /* Align number to the left of the unit */
 }
