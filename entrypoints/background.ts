@@ -30,7 +30,7 @@ export default defineBackground(() => {
   // Initialize default settings when extension is installed
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') {
-      const defaultSites: string[] = ['youtube.com', 'x.com', 'reddit.com']; // Added type
+      const defaultSites: string[] = ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
       // Initialize with an empty object for domain-specific scroll counts
       const scrollCounts: Record<string, number> = {}; // Added type
       
@@ -44,11 +44,13 @@ export default defineBackground(() => {
         scrollCounts: scrollCounts,  // Object to track per-domain scrolls
         distractingSites: defaultSites, // Default sites
         resetInterval: 30, // Default to 30 minutes for auto reset
-        lastResetTime: Date.now(), // Track when the counter was last reset
-        customLimits: {}, // Store custom limits per domain
+        lastResetTime: Date.now(), // Track when the counter was last reset        customLimits: {}, // Store custom limits per domain
         youtubeSettings: {  // YouTube-specific settings
           hideShorts: false,
           hideHomeFeed: false
+        },
+        instagramSettings: {  // Instagram-specific settings
+          hideReels: false
         }
       });
       console.log('ScrollStop: Default settings initialized');
@@ -124,17 +126,17 @@ export default defineBackground(() => {
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings']).then(sendResponse);
       return true; // Required for async response
     }
     
-    if (message.type === 'SAVE_SETTINGS') {
-      browser.storage.sync.set({ 
+    if (message.type === 'SAVE_SETTINGS') {      browser.storage.sync.set({ 
         maxScrolls: message.maxScrolls,
         distractingSites: message.distractingSites,
         resetInterval: message.resetInterval,
         customLimits: message.customLimits || {},
-        youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
+        youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
+        instagramSettings: message.instagramSettings || { hideReels: false }
       }).then(() => {
         // Notify content script about updated settings
         updateAllContentScripts({
@@ -143,7 +145,8 @@ export default defineBackground(() => {
           distractingSites: message.distractingSites,
           resetInterval: message.resetInterval,
           customLimits: message.customLimits || {},
-          youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false }
+          youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
+          instagramSettings: message.instagramSettings || { hideReels: false }
         });
         
         sendResponse({ success: true });
@@ -160,7 +163,7 @@ export default defineBackground(() => {
       
       // Get current settings first
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
         const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         
         // Reset all domain-specific counters
@@ -386,7 +389,7 @@ export default defineBackground(() => {
       pomodoroTimer = setTimeout(() => {
         // When break is done
         browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
           const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
           const resetTime = Date.now();
           
@@ -699,7 +702,7 @@ export default defineBackground(() => {
       
       // Reset counters
       browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+        const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
         const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
         const resetTime = Date.now();
         
@@ -926,7 +929,7 @@ export default defineBackground(() => {
       const resetInterval: number = result.resetInterval || 0; // Added type
       const lastResetTime: number = result.lastResetTime || Date.now(); // Added type
       const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
-      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com']; // Added type
+      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
       
       console.log(`Reset check - interval: ${resetInterval}min, scrollCounts:`, scrollCounts);
       

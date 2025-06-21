@@ -25,15 +25,18 @@ export default defineContentScript({
     let scrollCount = 0;
     let maxScrolls = 30; // Default value to 30
     let isBlocked = false;
-    let distractingSites = ['youtube.com', 'x.com', 'reddit.com']; // Default sites
+    let distractingSites = ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
-    let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers
-    // YouTube-specific settings
+    let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers    // YouTube-specific settings
     let youtubeSettings = {
       hideShorts: false,
       hideHomeFeed: false
+    };
+    // Instagram-specific settings
+    let instagramSettings = {
+      hideReels: false
     };
     // Pomodoro settings
     let isPomodoroActive = false;
@@ -444,16 +447,19 @@ export default defineContentScript({
       } else if (message.type === 'SETTINGS_UPDATED') {
         // Update local settings
         maxScrolls = message.maxScrolls;
-        distractingSites = message.distractingSites;
-        resetInterval = message.resetInterval;
+        distractingSites = message.distractingSites;        resetInterval = message.resetInterval;
         customLimits = message.customLimits || {};
         youtubeSettings = message.youtubeSettings || { hideShorts: false, hideHomeFeed: false };
-        
-        // Apply YouTube-specific settings if needed
+        instagramSettings = message.instagramSettings || { hideReels: false };        // Apply YouTube-specific settings if needed
         if (currentHost.includes('youtube.com')) {
           injectYoutubeStylesheet();
           setupYoutubeObserver();
           handleYoutubeHomeRedirect();
+        }
+
+        // Apply Instagram-specific settings if needed
+        if (currentHost.includes('instagram.com')) {
+          handleInstagramReelsRedirect();
         }
         
         // Update the counter
@@ -725,20 +731,20 @@ export default defineContentScript({
       const result = await browser.storage.sync.get({
         maxScrolls: 30, // Fallback to 30
         scrollCounts: {}, // New object structure for per-domain counts
-        distractingSites: ['youtube.com', 'x.com', 'reddit.com'], // Fallback
+        distractingSites: ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com'], // Fallback
         resetInterval: 0,
-        lastResetTime: Date.now(),
-        customLimits: {}, // Custom scroll limits per domain
+        lastResetTime: Date.now(),        customLimits: {}, // Custom scroll limits per domain
         youtubeSettings: { hideShorts: false, hideHomeFeed: false }, // YouTube-specific settings
+        instagramSettings: { hideReels: false }, // Instagram-specific settings
         adBlockerCompatMode: true // Enable compatibility mode for ad blockers
       });
       
       maxScrolls = result.maxScrolls;
       distractingSites = result.distractingSites;
-      resetInterval = result.resetInterval;
-      lastResetTime = result.lastResetTime;
+      resetInterval = result.resetInterval;      lastResetTime = result.lastResetTime;
       customLimits = result.customLimits;
       youtubeSettings = result.youtubeSettings;
+      instagramSettings = result.instagramSettings;
       adBlockerCompatMode = result.adBlockerCompatMode;
       
       // Only proceed with scroll blocking features if current site is in the distracting sites list
@@ -776,15 +782,19 @@ export default defineContentScript({
       // Start timer updates immediately if reset interval is enabled
       if (resetInterval > 0) {
         startTimerUpdates();
-      }
-      
-      // Apply YouTube-specific features if on YouTube
-      if (currentHost.includes('youtube.com')) {
-        console.log('Applying YouTube-specific settings:', youtubeSettings);
-        injectYoutubeStylesheet();
-        setupYoutubeObserver();
-        handleYoutubeHomeRedirect();
-      }
+      }        // Apply YouTube-specific features if on YouTube
+        if (currentHost.includes('youtube.com')) {
+          console.log('Applying YouTube-specific settings:', youtubeSettings);
+          injectYoutubeStylesheet();
+          setupYoutubeObserver();
+          handleYoutubeHomeRedirect();
+        }
+
+        // Apply Instagram-specific features if on Instagram
+        if (currentHost.includes('instagram.com')) {
+          console.log('Applying Instagram-specific settings:', instagramSettings);
+          handleInstagramReelsRedirect();
+        }
       
       // Periodically sync scroll count with storage to prevent inconsistencies
       setInterval(syncScrollCount, 10000); // Sync every 10 seconds
@@ -1109,9 +1119,7 @@ export default defineContentScript({
       `;
       
       document.head.appendChild(style);
-    }
-
-    // Function to handle YouTube home redirect
+    }    // Function to handle YouTube home redirect
     function handleYoutubeHomeRedirect() {
       // Only proceed if we're on YouTube 
       if (!currentHost.includes('youtube.com')) return;
@@ -1129,6 +1137,20 @@ export default defineContentScript({
       if (youtubeSettings.hideShorts && (path === '/shorts/' || path.startsWith('/shorts'))) {
         // Redirect to subscriptions
         window.location.href = 'https://www.youtube.com/feed/subscriptions';
+      }
+    }
+
+    // Function to handle Instagram Reels redirect
+    function handleInstagramReelsRedirect() {
+      // Only proceed if we're on Instagram
+      if (!currentHost.includes('instagram.com')) return;
+      
+      const path = window.location.pathname;
+      
+      // Handle reels redirection - depends on hideReels setting
+      if (instagramSettings.hideReels && (path.includes('/reel/') || path === '/reels/' || path.startsWith('/reels'))) {
+        // Redirect to home feed
+        window.location.href = 'https://www.instagram.com/';
       }
     }
 

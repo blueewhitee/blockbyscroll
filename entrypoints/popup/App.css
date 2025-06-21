@@ -1,22 +1,26 @@
+@import './background-animation.css';
+
 * { box-sizing: border-box; } /* Global box-sizing */
 
 :root {
-  --primary-color: #6c8a6e;
-  --primary-hover: #4B6A4D;
-  --danger-color: #a45d5d;
-  --danger-hover: #8e4f4f;
-  --background: #F7F9FA;
-  --text-color: #3a3a2c;
-  --secondary-text: #5e5e4c;
-  --text-shadow-soft: 1px 1px 3px rgba(0, 0, 0, 0.3);
-  --text-shadow-sharper: 1px 1px 2px rgba(0, 0, 0, 0.4);
-  --border-color: #E1E4E8;
-  --card-bg: #FFFFFF;
-  --input-bg: #FFFFFF;
-  --input-border: #D1D5DA;
-  --button-text: #FFFFFF;
-  --success-color: #28A745;
-  --progress-color: #7e8376;
+  --primary-color: #4f46e5;
+  --primary-hover: #4338ca;
+  --danger-color: #ef4444;
+  --danger-hover: #dc2626;
+  --background: #f8fafc;
+  --text-color: #1e293b;
+  --secondary-text: #64748b;
+  --text-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --text-shadow-sharper: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --border-color: #e2e8f0;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --button-text: #ffffff;
+  --success-color: #10b981;
+  --progress-color: #4f46e5;
+  --accent-light: #eef2ff;
+  --accent-lighter: #f1f5f9;
 }
 
 html {
@@ -28,12 +32,8 @@ body {
   font-family: 'Open Sans', sans-serif;
   font-weight: 400;
   color: var(--text-color);
-  background-image: url('/ChatGPT Image May 12, 2025, 10_29_58 PM.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
   overflow: hidden; /* Keep this here */
+  background-color: var(--background);
 }
 
 .container {
@@ -42,10 +42,11 @@ body {
   min-height: 320px; /* Increased from 300px */
   display: flex;
   flex-direction: column;
-  background-color: rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   position: relative;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--border-color);
 }
 
 header {
@@ -55,26 +56,43 @@ header {
 
 h1 {
   margin: 0;
-  color: #4A7C4A;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   font-size: 28px;
   font-family: Georgia, serif;
   font-weight: 700;
-  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.4);
+  text-shadow: none;
 }
 
 .subtitle {
   margin: 0;
   color: var(--secondary-text);
   font-size: 14px;
-  text-shadow: var(--text-shadow-sharper);
-  font-weight: 600;
+  text-shadow: none;
+  font-weight: 500;
 }
 
 .stat-card {
-  background-color: var(--card-bg);
-  border-radius: 8px;
-  padding: 16px;
+  background: linear-gradient(145deg, #ffffff 0%, var(--accent-light) 100%);
+  border-radius: 12px;
+  padding: 20px;
   margin-bottom: 24px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
 }
 
 .stat-label {
@@ -92,16 +110,36 @@ h1 {
 }
 
 .progress-bar {
-  height: 6px;
-  background-color: var(--border-color);
-  border-radius: 4px;
+  height: 8px;
+  background: linear-gradient(90deg, #f1f5f9 0%, var(--accent-lighter) 100%);
+  border-radius: 6px;
   overflow: hidden;
+  position: relative;
 }
 
 .progress-fill {
   height: 100%;
-  background-color: var(--progress-color);
-  transition: width 0.3s ease;
+  background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+  border-radius: 6px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%);
+  background-size: 8px 8px;
+  animation: progressShimmer 2s linear infinite;
+}
+
+@keyframes progressShimmer {
+  0% { background-position: 0 0; }
+  100% { background-position: 16px 0; }
 }
 
 .settings-group {
@@ -118,13 +156,31 @@ h1 {
 
 .settings-group input {
   width: 100%;
-  padding: 0.5em 0.75em;
-  border-radius: 4px;
-  border: 1px solid var(--border-color);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--input-border);
   font-size: 16px;
   box-sizing: border-box;
-  background-color: var(--card-bg);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 242, 255, 0.95));
   color: var(--text-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+}
+
+.settings-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(79, 70, 229, 0.15);
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #ffffff, #f8faff);
+}
+
+.settings-group input:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
 }
 
 .status-message {
@@ -145,40 +201,74 @@ h1 {
 
 button {
   flex: 1;
-  padding: 10px 0;
-  border-radius: 4px;
+  padding: 14px 0;
+  border-radius: 10px;
   border: none;
   font-size: 14px;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  transition: left 0.5s;
+}
+
+button:hover::before {
+  left: 100%;
 }
 
 .save-button {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   color: white;
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.3);
 }
 
 .save-button:hover {
-  background-color: var(--primary-hover);
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(79, 70, 229, 0.4);
 }
 
 .reset-button {
-  background-color: var(--danger-color);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
+  box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.3);
 }
 
 .reset-button:hover {
-  background-color: var(--danger-hover);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(239, 68, 68, 0.4);
 }
 
 .info-box {
-  background-color: var(--card-bg);
-  border-radius: 8px;
-  padding: 12px;
+  background: linear-gradient(145deg, #f8fafc 0%, var(--accent-light) 100%);
+  border-radius: 12px;
+  padding: 16px;
   font-size: 12px;
   color: var(--secondary-text);
-  line-height: 1.5;
+  line-height: 1.6;
+  border: 1px solid #e2e8f0;
+  position: relative;
+}
+
+.info-box::before {
+  content: '💡';
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 16px;
+  opacity: 0.6;
 }
 
 .info-box p {
@@ -202,31 +292,34 @@ button {
   max-height: 150px;
   overflow-y: auto;
   overflow-x: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
   margin-bottom: 8px;
-  background-color: var(--background);
+  background: linear-gradient(145deg, #ffffff 0%, var(--accent-lighter) 100%);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
-.site-item {
-  width: 30px;
-  height: 30px;
+.site-item {  width: 32px;
+  height: 32px;
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f0f0f0;
-  border-radius: 4px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
   position: relative;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .site-item:hover {
-  background-color: #e0e0e0;
+  background: linear-gradient(145deg, var(--accent-light) 0%, #ffffff 100%);
+  border-color: var(--primary-color);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 25px 0 rgba(79, 70, 229, 0.2);
 }
 
 .site-favicon {
@@ -278,26 +371,35 @@ button {
 
 .add-site input {
   flex: 1;
-  padding: 0.5em 0.75em;
-  padding-right: 2.5em;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
+  padding: 12px 16px;
+  padding-right: 3em;
+  border: 2px solid var(--input-border);
+  border-radius: 10px;
   font-size: 14px;
-  background-color: var(--card-bg);
+  background-color: var(--input-bg);
   color: var(--text-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+}
+
+.add-site input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  transform: translateY(-1px);
 }
 
 .add-site-plus-button {
   position: absolute;
-  right: 0px;
-  top: 0;
-  bottom: 0;
+  right: 2px;
+  top: 2px;
+  bottom: 2px;
   margin: auto 0;
-  background-color: var(--primary-color);
-  color: var(--button-text);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
   border: none;
-  border-radius: 0 4px 4px 0;
-  padding: 0 0.8em;
+  border-radius: 8px;
+  padding: 0 1em;
   cursor: pointer;
   font-size: 1.2em;
   font-weight: bold;
@@ -305,11 +407,14 @@ button {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  height: 100%;
+  height: calc(100% - 4px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .add-site-plus-button:hover {
-  background-color: var(--primary-hover);
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  transform: scale(1.05);
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.4);
 }
 
 .inline-input {
@@ -320,25 +425,128 @@ button {
 
 .small-input {
   width: 60px;
-  padding: 0.5em 0.75em;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border: 2px solid var(--input-border);
+  border-radius: 8px;
   font-size: 14px;
-  background-color: var(--card-bg);
+  background-color: var(--input-bg);
   color: var(--text-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+}
+
+.small-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  transform: translateY(-1px);
 }
 
 .unit-text {
   font-size: 14px;
   color: var(--secondary-text);
-  text-shadow: var(--text-shadow-sharper);
-  font-weight: 600;
+  text-shadow: none;
+  font-weight: 500;
 }
 
 .info-text {
   font-size: 12px;
   color: var(--secondary-text);
   margin-left: 4px;
-  text-shadow: var(--text-shadow-sharper);
+  text-shadow: none;
+  font-weight: 500;
+}
+
+/* Enhanced input field styling for better number visibility */
+input[type="number"] {
+  min-width: 80px;
+  text-align: center;
   font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Specific styling for the auto-reset input to ensure visibility */
+.inline-input input[type="number"] {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 242, 255, 0.95));
+  border: 2px solid var(--border-color);
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+}
+
+.inline-input input[type="number"]:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(79, 70, 229, 0.15);
+  background: linear-gradient(135deg, #ffffff, #f8faff);
+}
+
+.inline-input input[type="number"]:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
+}
+
+/* Enhanced styling for the minute label */
+.inline-input span {
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Inline layout for Global scroll limit and Auto-reset counter */
+.settings-inline-group {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  align-items: flex-end; /* Align items to the bottom for a clean row */
+}
+
+.settings-inline-group .settings-group {
+  flex: 1; /* Make both groups take equal width */
+  margin-bottom: 0;
+}
+
+.settings-inline-group .inline-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-inline-group .inline-input input {
+  flex: 1; /* Make input fields expand equally */
+  width: 100%; /* Fallback */
+  min-width: 0; /* Allow input to shrink */
+}
+
+.input-with-unit {
+  position: relative;
+  display: flex;
+  flex: 1;
+}
+
+.input-with-unit::after {
+  content: 'minutes';
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--secondary-text);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.input-with-unit input {
+  padding-right: 80px; /* Add space for the unit text */
+  text-align: right; /* Align number to the left of the unit */
 }
