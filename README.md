@@ -9,7 +9,7 @@ NoMoScroll is a browser extension designed to help you maintain healthy scrollin
 - 📊 Track your scrolling activity 
 - 🛑 Set custom scroll limits to prevent endless doomscrolling
 - 📱 Visual indicators showing your current scroll progress
-- 🔄 Quick reset option when you need to continue browsing
+- 🔄 pomodoro to help you quickly focus on tasks without any burnout
 - ⏱️ Optional auto-reset timer to refresh counters automatically
 - ⚙️ Customizable blocklist to manage which sites are monitored
 - 🚫 Block YouTube Shorts and homepage to reduce distractions and time waste
