@@ -507,46 +507,31 @@ input[type="number"] {
   display: flex;
   gap: 16px;
   margin-bottom: 12px;
-  align-items: flex-end; /* Align items to the bottom for a clean row */
 }
 
 .settings-inline-group .settings-group {
-  flex: 1; /* Make both groups take equal width */
+  flex: 1;
   margin-bottom: 0;
 }
 
+.settings-inline-group .settings-group:first-child {
+  flex: 1.2; /* Slightly wider for Global scroll limit */
+}
+
+.settings-inline-group .settings-group:last-child {
+  flex: 0.8; /* Slightly narrower for Auto-reset counter */
+}
+
+/* Adjust input width for inline layout */
+.settings-inline-group .settings-group input {
+  width: 100%;
+}
+
 .settings-inline-group .inline-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .settings-inline-group .inline-input input {
-  flex: 1; /* Make input fields expand equally */
-  width: 100%; /* Fallback */
-  min-width: 0; /* Allow input to shrink */
-}
-
-.input-with-unit {
-  position: relative;
-  display: flex;
-  flex: 1;
-}
-
-.input-with-unit::after {
-  content: 'minutes';
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--secondary-text);
-  font-size: 14px;
-  font-weight: 500;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.input-with-unit input {
-  padding-right: 80px; /* Add space for the unit text */
-  text-align: right; /* Align number to the left of the unit */
+  width: 70px;
 }
