@@ -5,10 +5,11 @@ export default defineConfig({
   modules: [
     '@wxt-dev/module-react',
   ],
+  srcDir: '.',
   manifest: {
     name: 'NoMoScroll',
     description: 'Control scrolling on distracting websites to prevent doomscrolling',
-    version: '2.2.0',
+    version: '3.0.0',
     permissions: ['storage', 'tabs'],
     host_permissions: ['<all_urls>'], // Allow extension to run on any website
     action: {
