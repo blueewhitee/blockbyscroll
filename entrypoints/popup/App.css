@@ -515,23 +515,71 @@ input[type="number"] {
 }
 
 .settings-inline-group .settings-group:first-child {
-  flex: 1.2; /* Slightly wider for Global scroll limit */
+  flex: 1; /* Equal width for both inputs */
 }
 
 .settings-inline-group .settings-group:last-child {
-  flex: 0.8; /* Slightly narrower for Auto-reset counter */
+  flex: 1; /* Equal width for both inputs */
 }
 
-/* Adjust input width for inline layout */
+/* Adjust input width for inline layout - make them bigger */
 .settings-inline-group .settings-group input {
   width: 100%;
+  min-height: 48px; /* Make inputs taller */
+  padding: 14px 16px; /* More padding for bigger appearance */
+  font-size: 16px; /* Larger font size */
+  font-weight: 600; /* Bolder text */
+  text-align: center; /* Center the numbers */
+  border-radius: 12px; /* More rounded corners */
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.98));
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
 }
 
 .settings-inline-group .inline-input {
   justify-content: flex-start;
-  gap: 6px;
+  gap: 8px;
+  align-items: center;
 }
 
 .settings-inline-group .inline-input input {
-  width: 70px;
+  flex: 1;
+  min-width: 100px; /* Ensure minimum width */
+}
+
+/* Special styling for the reset interval input with unit text */
+.input-with-unit {
+  position: relative;
+}
+
+.settings-inline-group .input-with-unit input {
+  padding-right: 70px !important; /* Make more room for "minutes" text */
+  padding-left: 30px !important; /* Move user input a little more to the right */
+  text-align: left !important; /* Align text to the left instead of center */
+}
+
+.input-with-unit .unit-text {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--secondary-text);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none; /* Don't interfere with input clicks */
+}
+
+/* Focus and hover states for the bigger inputs */
+.settings-inline-group .settings-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), 0 4px 16px rgba(79, 70, 229, 0.15);
+  background: linear-gradient(135deg, #ffffff, #f8faff);
+  transform: translateY(-1px);
+}
+
+.settings-inline-group .settings-group input:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(248, 250, 255, 1));
 }

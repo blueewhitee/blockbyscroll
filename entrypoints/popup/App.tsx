@@ -381,7 +381,9 @@ export default function App() {
               min="0"
               value={resetInterval}
               onChange={(e) => handleResetIntervalChange(Math.max(0, parseInt(e.target.value) || 0))}
+              placeholder="minutes"
             />
+            <span className="unit-text">minutes</span>
           </div>
         </div>
       </div>
