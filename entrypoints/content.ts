@@ -315,6 +315,7 @@ export default defineContentScript({
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
+    let temporaryBonusScrolls: Record<string, number> = {}; // Temporary bonus scrolls per domain (reset on timer/manual reset)
     let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers
     
     // AI Content Analysis variables
@@ -745,6 +746,8 @@ export default defineContentScript({
         if (contentScraper) {
           contentScraper.clearBuffer();
         }
+        // Clear temporary bonus scrolls
+        temporaryBonusScrolls = {};
       } else if (message.type === 'SETTINGS_UPDATED') {
         // Update local settings
         maxScrolls = message.maxScrolls;
@@ -1196,17 +1199,15 @@ export default defineContentScript({
           
           // Update scroll limit if bonus scrolls awarded
           if (recommendations.newMaxScrolls > getEffectiveScrollLimit()) {
-            const bonusScrolls = recommendations.newMaxScrolls - getEffectiveScrollLimit();
+            const currentLimit = getEffectiveScrollLimit();
+            const bonusScrolls = recommendations.newMaxScrolls - currentLimit;
             
-            // Update the custom limit for this domain
+            // Add temporary bonus scrolls for this domain (does not persist across resets)
             const domain = getMatchingDomain();
-            customLimits[domain] = recommendations.newMaxScrolls;
+            temporaryBonusScrolls[domain] = (temporaryBonusScrolls[domain] || 0) + bonusScrolls;
             
-            // Save to storage
-            browser.storage.sync.set({ customLimits }).then(() => {
-              console.log(`AI CONTENT: Added ${bonusScrolls} bonus scrolls. New limit: ${recommendations.newMaxScrolls}`);
-              updateCounter();
-            });
+            console.log(`AI CONTENT: Added ${bonusScrolls} temporary bonus scrolls. New effective limit: ${getEffectiveScrollLimit()}`);
+            updateCounter();
           }
           
           // Show recommendation overlay if needed
@@ -1332,6 +1333,8 @@ export default defineContentScript({
         if (contentScraper) {
           contentScraper.clearBuffer();
         }
+        // Clear temporary bonus scrolls
+        temporaryBonusScrolls = {};
         
         // Use background script to ensure the reset is properly persisted
         browser.runtime.sendMessage({
@@ -1746,7 +1749,9 @@ export default defineContentScript({
     // Get effective scroll limit for current domain
     function getEffectiveScrollLimit() {
       const domain = getMatchingDomain();
-      return customLimits[domain] || maxScrolls;
+      const baseLimit = customLimits[domain] || maxScrolls;
+      const bonusScrolls = temporaryBonusScrolls[domain] || 0;
+      return baseLimit + bonusScrolls;
     }
     
     // Block/unblock scrolling
