@@ -1,3 +1,289 @@
+// AI analysis types and classes defined inline for now
+interface ScrapingConfig {
+  distractingSites: string[];
+  enabled: boolean;
+  minScrollsForAnalysis: number;
+}
+
+interface ScrapingResult {
+  success: boolean;
+  data?: string;
+  error?: string;
+}
+
+interface AIAnalysisResponse {
+  content_type: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
+  confidence_score: number;
+  educational_value: number;
+  addiction_risk: number;
+  recommended_action: 'bonus_scrolls' | 'maintain_limit' | 'show_warning' | 'immediate_break';
+  bonus_scrolls: number;
+  reasoning: string;
+  break_suggestion?: string;
+}
+
+// Simplified scraper class
+class GeneralScraper {
+  private config: ScrapingConfig;
+  private contentBuffer: string[] = [];
+  
+  constructor(config: ScrapingConfig) {
+    this.config = config;
+  }
+  
+  initialize(): boolean {
+    const currentDomain = window.location.hostname.replace(/^www\./, '');
+    return this.config.distractingSites.some(site => 
+      currentDomain.includes(site) || site.includes(currentDomain)
+    );
+  }
+  
+  captureCurrentContent(): void {
+    try {
+      // Get all visible text content
+      const walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: (node) => {
+            const parent = node.parentElement;
+            if (!parent) return NodeFilter.FILTER_REJECT;
+            
+            // Skip script, style, and hidden elements
+            if (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.tagName === 'NOSCRIPT') {
+              return NodeFilter.FILTER_REJECT;
+            }
+            
+            // Check if element is visible
+            const style = window.getComputedStyle(parent);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+              return NodeFilter.FILTER_REJECT;
+            }
+            
+            // Check if in viewport
+            const rect = parent.getBoundingClientRect();
+            if (rect.bottom < 0 || rect.top > window.innerHeight) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        }
+      );
+      
+      const visibleText: string[] = [];
+      let node;
+      while (node = walker.nextNode()) {
+        const text = node.textContent?.trim();
+        if (text && text.length > 10) {
+          visibleText.push(text);
+        }
+      }
+      
+      // Add to buffer (keep last 3 captures)
+      this.contentBuffer.push(visibleText.join(' '));
+      if (this.contentBuffer.length > 3) {
+        this.contentBuffer.shift();
+      }
+      
+      console.log('SCRAPER: Captured content, buffer size:', this.contentBuffer.length);
+    } catch (error) {
+      console.error('SCRAPER: Error capturing content:', error);
+    }
+  }
+  
+  getContentForAnalysis(): ScrapingResult {
+    if (this.contentBuffer.length < 2) {
+      return {
+        success: false,
+        error: 'Not enough content captured'
+      };
+    }
+    
+    const combinedContent = this.contentBuffer.join('\n\n');
+    const contentData = {
+      domain: window.location.hostname,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      content: combinedContent.substring(0, 3000) // Limit content length
+    };
+    
+    return {
+      success: true,
+      data: JSON.stringify(contentData)
+    };
+  }
+  
+  clearBuffer(): void {
+    this.contentBuffer = [];
+  }
+}
+
+// Simplified AI analyzer class
+class AIContentAnalyzer {
+  private apiKey = 'AIzaSyCYsgshv7TI7I2y5o6O6jvsaiB6PRRa30E';
+  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+  
+  async analyzeContent(contentData: string, context: any): Promise<any> {
+    try {
+      const parsedData = JSON.parse(contentData);
+      const prompt = this.buildPrompt(parsedData, context);
+      
+      const response = await this.callGeminiAPI(prompt);
+      return {
+        success: true,
+        analysis: response
+      };
+    } catch (error) {
+      console.error('AI ANALYZER: Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Analysis failed'
+      };
+    }
+  }
+  
+  private buildPrompt(data: any, context: any): string {
+    const scrollsRemaining = context.maxScrolls - context.scrollCount;
+    const scrollTime = Math.round((Date.now() - context.scrollStartTime) / 60000);
+    
+    return `You are an expert digital wellness analyst. Analyze the following web content that a user has been scrolling through and predict their likely behavior patterns.
+
+**Context:**
+- User has been scrolling for ${scrollTime} minutes
+- Current scroll count: ${context.scrollCount} out of ${context.maxScrolls} maximum
+- Scrolls remaining: ${scrollsRemaining}
+- Platform: ${data.domain}
+
+**Content to Analyze:**
+${data.content}
+
+**Required Response Format (JSON only, no other text):**
+{
+  "content_type": "productive|neutral|entertainment|doomscroll",
+  "confidence_score": 0.0-1.0,
+  "educational_value": 0-10,
+  "addiction_risk": 0-10,
+  "recommended_action": "bonus_scrolls|maintain_limit|show_warning|immediate_break",
+  "bonus_scrolls": 0-15,
+  "reasoning": "Brief explanation of your assessment",
+  "break_suggestion": "Specific alternative activity if break recommended"
+}
+
+**Decision Guidelines:**
+- **Productive** (bonus_scrolls: 8-15): Educational content, tutorials, research, professional development
+- **Neutral** (bonus_scrolls: 3-5): News, general interest, mixed value content  
+- **Entertainment** (bonus_scrolls: 0-2): Social media, memes, celebrity content
+- **Doomscroll** (immediate_break): Highly repetitive, rage-inducing, or mindless content
+
+Respond with ONLY the JSON object:`;
+  }
+  
+  private async callGeminiAPI(prompt: string): Promise<AIAnalysisResponse> {
+    const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 1000,
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const responseText = data.candidates[0].content.parts[0].text;
+      return JSON.parse(responseText);
+      
+    } catch (error) {
+      console.error('GEMINI API Error:', error);
+      // Return fallback response
+      return {
+        content_type: 'unknown',
+        confidence_score: 0,
+        educational_value: 5,
+        addiction_risk: 5,
+        recommended_action: 'maintain_limit',
+        bonus_scrolls: 0,
+        reasoning: 'AI analysis unavailable',
+        break_suggestion: 'Take a 5-minute break'
+      };
+    }
+  }
+  
+  applyRecommendations(analysis: AIAnalysisResponse, currentMaxScrolls: number): any {
+    const { recommended_action, bonus_scrolls, reasoning, break_suggestion } = analysis;
+
+    switch (recommended_action) {
+      case 'bonus_scrolls':
+        return {
+          newMaxScrolls: currentMaxScrolls + bonus_scrolls,
+          shouldShowOverlay: true,
+          overlayMessage: `🎉 Productive content detected! Added ${bonus_scrolls} bonus scrolls. ${reasoning}`,
+          overlayType: 'encouragement'
+        };
+
+      case 'show_warning':
+        return {
+          newMaxScrolls: currentMaxScrolls,
+          shouldShowOverlay: true,
+          overlayMessage: `⚠️ Warning: ${reasoning}. Consider taking a break soon.`,
+          overlayType: 'warning'
+        };
+
+      case 'immediate_break':
+        return {
+          newMaxScrolls: currentMaxScrolls,
+          shouldShowOverlay: true,
+          overlayMessage: `🛑 Time for a break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
+          overlayType: 'break'
+        };
+
+      default:
+        return {
+          newMaxScrolls: currentMaxScrolls,
+          shouldShowOverlay: false,
+          overlayMessage: reasoning,
+          overlayType: 'warning'
+        };
+    }
+  }
+  
+  async testConnection(): Promise<boolean> {
+    try {
+      const testPrompt = 'Test connection. Respond with: {"status": "ok"}';
+      await this.callGeminiAPI(testPrompt);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// Factory functions
+function createScraper(config: ScrapingConfig): GeneralScraper {
+  return new GeneralScraper(config);
+}
+
+function createAIAnalyzer(): AIContentAnalyzer {
+  return new AIContentAnalyzer();
+}
+
 declare global {
   interface Window {
     _scrollStopObserver: MutationObserver | null;
@@ -29,7 +315,17 @@ export default defineContentScript({
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
     let customLimits: Record<string, number> = {}; // Custom scroll limits per domain
-    let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers    // YouTube-specific settings
+    let temporaryBonusScrolls: Record<string, number> = {}; // Temporary bonus scrolls per domain (reset on timer/manual reset)
+    let adBlockerCompatMode = true; // Enable compatibility mode for ad blockers
+    
+    // AI Content Analysis variables
+    let contentScraper: GeneralScraper | null = null;
+    let aiAnalyzer: AIContentAnalyzer | null = null;
+    let scrollStartTime = Date.now();
+    let aiAnalysisEnabled = true; // Default enabled
+    let hasTriggeredAIAnalysis = false; // Prevent multiple analyses per session
+    
+    // YouTube-specific settings
     let youtubeSettings = {
       hideShorts: false,
       hideHomeFeed: false
@@ -444,6 +740,14 @@ export default defineContentScript({
         lastResetTime = message.lastResetTime;
         updateCounter();
         setScrollBlocking(false);
+        // Reset AI analysis flag
+        hasTriggeredAIAnalysis = false;
+        // Clear scraper buffer
+        if (contentScraper) {
+          contentScraper.clearBuffer();
+        }
+        // Clear temporary bonus scrolls
+        temporaryBonusScrolls = {};
       } else if (message.type === 'SETTINGS_UPDATED') {
         // Update local settings
         maxScrolls = message.maxScrolls;
@@ -764,6 +1068,9 @@ export default defineContentScript({
       document.body.appendChild(counter);
       counter.style.display = 'block';
       
+      // Initialize AI Content Analysis
+      await initializeAIAnalysis();
+      
       // Check if we should block based on current count
       const effectiveMax = getEffectiveScrollLimit();
       if (scrollCount >= effectiveMax) {
@@ -800,6 +1107,211 @@ export default defineContentScript({
       setInterval(syncScrollCount, 10000); // Sync every 10 seconds
     }
     
+    // Initialize AI Content Analysis system
+    async function initializeAIAnalysis() {
+      if (!aiAnalysisEnabled) {
+        console.log('AI CONTENT: Analysis disabled');
+        return;
+      }
+
+      try {
+        // Initialize content scraper
+        const scrapingConfig: ScrapingConfig = {
+          distractingSites: distractingSites,
+          enabled: aiAnalysisEnabled,
+          minScrollsForAnalysis: 2
+        };
+        
+        contentScraper = createScraper(scrapingConfig);
+        
+        // Initialize AI analyzer
+        aiAnalyzer = createAIAnalyzer();
+        
+        // Test AI connection
+        const connectionTest = await aiAnalyzer.testConnection();
+        if (!connectionTest) {
+          console.warn('AI CONTENT: Connection test failed, but continuing with fallback');
+        }
+        
+        // Initialize the scraper
+        const scraperInitialized = contentScraper.initialize();
+        if (scraperInitialized) {
+          console.log('AI CONTENT: Analysis system initialized successfully');
+          
+          // Start capturing content immediately
+          contentScraper.captureCurrentContent();
+        } else {
+          console.log('AI CONTENT: Scraper not initialized (site not monitored or disabled)');
+          contentScraper = null;
+          aiAnalyzer = null;
+        }
+        
+      } catch (error) {
+        console.error('AI CONTENT: Failed to initialize analysis system:', error);
+        contentScraper = null;
+        aiAnalyzer = null;
+      }
+    }
+
+    // Perform AI content analysis and apply recommendations
+    async function performAIAnalysis() {
+      if (!contentScraper || !aiAnalyzer || hasTriggeredAIAnalysis) {
+        return;
+      }
+
+      try {
+        console.log('AI CONTENT: Starting content analysis...');
+        hasTriggeredAIAnalysis = true;
+        
+        // Show analysis indicator
+        showAIAnalysisIndicator(true);
+        
+        // Get scraped content for analysis
+        const scrapingResult = contentScraper.getContentForAnalysis();
+        
+        if (!scrapingResult.success || !scrapingResult.data) {
+          console.log('AI CONTENT: Not enough content for analysis');
+          showAIAnalysisIndicator(false);
+          return;
+        }
+
+        // Analyze content with AI
+        const analysisResult = await aiAnalyzer.analyzeContent(
+          scrapingResult.data,
+          {
+            scrollCount: scrollCount,
+            maxScrolls: getEffectiveScrollLimit(),
+            domain: getMatchingDomain(),
+            scrollStartTime: scrollStartTime
+          }
+        );
+
+        showAIAnalysisIndicator(false);
+
+        if (analysisResult.success && analysisResult.analysis) {
+          console.log('AI CONTENT: Analysis completed:', analysisResult.analysis);
+          
+          // Apply AI recommendations
+          const recommendations = aiAnalyzer.applyRecommendations(
+            analysisResult.analysis,
+            getEffectiveScrollLimit()
+          );
+          
+          // Update scroll limit if bonus scrolls awarded
+          if (recommendations.newMaxScrolls > getEffectiveScrollLimit()) {
+            const currentLimit = getEffectiveScrollLimit();
+            const bonusScrolls = recommendations.newMaxScrolls - currentLimit;
+            
+            // Add temporary bonus scrolls for this domain (does not persist across resets)
+            const domain = getMatchingDomain();
+            temporaryBonusScrolls[domain] = (temporaryBonusScrolls[domain] || 0) + bonusScrolls;
+            
+            console.log(`AI CONTENT: Added ${bonusScrolls} temporary bonus scrolls. New effective limit: ${getEffectiveScrollLimit()}`);
+            updateCounter();
+          }
+          
+          // Show recommendation overlay if needed
+          if (recommendations.shouldShowOverlay) {
+            showAIRecommendationOverlay(recommendations);
+          }
+          
+        } else {
+          console.error('AI CONTENT: Analysis failed:', analysisResult.error);
+        }
+        
+      } catch (error) {
+        console.error('AI CONTENT: Error during AI analysis:', error);
+        showAIAnalysisIndicator(false);
+      }
+    }
+
+    // Show AI analysis indicator
+    function showAIAnalysisIndicator(show: boolean) {
+      let indicator = document.getElementById('ai-analysis-indicator');
+      
+      if (show && !indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'ai-analysis-indicator';
+        indicator.innerHTML = '🤖 Analyzing content...';
+        indicator.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background-color: rgba(76, 175, 80, 0.9);
+          color: white;
+          padding: 10px 15px;
+          border-radius: 8px;
+          font-weight: bold;
+          z-index: 10000;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-size: 14px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(indicator);
+      } else if (!show && indicator) {
+        indicator.remove();
+      }
+    }
+
+    // Show AI recommendation overlay
+    function showAIRecommendationOverlay(recommendations: any) {
+      let aiOverlay = document.getElementById('ai-recommendation-overlay');
+      
+      if (aiOverlay) {
+        aiOverlay.remove();
+      }
+      
+      aiOverlay = document.createElement('div');
+      aiOverlay.id = 'ai-recommendation-overlay';
+      aiOverlay.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: ${recommendations.overlayType === 'encouragement' ? 'rgba(76, 175, 80, 0.95)' : 
+                          recommendations.overlayType === 'break' ? 'rgba(244, 67, 54, 0.95)' : 
+                          'rgba(255, 152, 0, 0.95)'};
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        max-width: 500px;
+        text-align: center;
+        z-index: 2147483646;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      `;
+      
+      aiOverlay.innerHTML = `
+        <div style="font-size: 18px; margin-bottom: 15px; font-weight: bold;">
+          ${recommendations.overlayMessage}
+        </div>
+        <button id="ai-overlay-close" style="
+          background-color: rgba(255,255,255,0.2);
+          border: 2px solid white;
+          color: white;
+          padding: 10px 20px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: bold;
+        ">Continue</button>
+      `;
+      
+      document.body.appendChild(aiOverlay);
+      
+      // Auto-close after 5 seconds or on click
+      const closeBtn = document.getElementById('ai-overlay-close');
+      const closeOverlay = () => {
+        if (aiOverlay) aiOverlay.remove();
+      };
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeOverlay);
+      }
+      
+      setTimeout(closeOverlay, 5000);
+    }
+
     // Check if we should reset based on time
     function checkTimeBasedReset() {
       if (resetInterval <= 0) return; // Skip if disabled
@@ -815,6 +1327,14 @@ export default defineContentScript({
         setScrollBlocking(false);
         // Update the last reset time
         lastResetTime = now;
+        // Reset AI analysis flag
+        hasTriggeredAIAnalysis = false;
+        // Clear scraper buffer
+        if (contentScraper) {
+          contentScraper.clearBuffer();
+        }
+        // Clear temporary bonus scrolls
+        temporaryBonusScrolls = {};
         
         // Use background script to ensure the reset is properly persisted
         browser.runtime.sendMessage({
@@ -834,6 +1354,11 @@ export default defineContentScript({
     function incrementScrollCount() {
       const domain = getMatchingDomain();
       
+      // Capture content for AI analysis before incrementing
+      if (contentScraper) {
+        contentScraper.captureCurrentContent();
+      }
+      
       // Use the background script to handle the storage update
       browser.runtime.sendMessage({
         type: 'INCREMENT_SCROLL',
@@ -843,8 +1368,16 @@ export default defineContentScript({
           scrollCount = response.newCount;
           updateCounter();
           
-          // Check against the effective limit (custom or global)
+          // Check if we should trigger AI analysis (when 3 scrolls remaining)
           const effectiveMax = getEffectiveScrollLimit();
+          const scrollsRemaining = effectiveMax - scrollCount;
+          
+          if (aiAnalyzer && contentScraper && scrollsRemaining <= 3 && !hasTriggeredAIAnalysis) {
+            console.log(`AI CONTENT: Triggering analysis with ${scrollsRemaining} scrolls remaining`);
+            performAIAnalysis();
+          }
+          
+          // Check against the effective limit (custom or global)
           if (scrollCount >= effectiveMax) {
             setScrollBlocking(true);
           }
@@ -1216,7 +1749,9 @@ export default defineContentScript({
     // Get effective scroll limit for current domain
     function getEffectiveScrollLimit() {
       const domain = getMatchingDomain();
-      return customLimits[domain] || maxScrolls;
+      const baseLimit = customLimits[domain] || maxScrolls;
+      const bonusScrolls = temporaryBonusScrolls[domain] || 0;
+      return baseLimit + bonusScrolls;
     }
     
     // Block/unblock scrolling
