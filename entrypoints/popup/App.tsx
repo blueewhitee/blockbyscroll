@@ -21,6 +21,19 @@ export default function App() {
   const [instagramSettings, setInstagramSettings] = useState<{
     hideReels: boolean;
   }>({ hideReels: false });
+  const [videoOverlaySettings, setVideoOverlaySettings] = useState<{
+    enabled: boolean;
+    opacity: number;
+    autoPlayOnReveal: boolean;
+    buttonText: string;
+    buttonColor: string;
+  }>({ 
+    enabled: true, 
+    opacity: 0.9, 
+    autoPlayOnReveal: false, 
+    buttonText: 'View Video', 
+    buttonColor: '#1DA1F2' 
+  });
   const [editMode, setEditMode] = useState<boolean>(false);
   const [showPomodoroPopup, setShowPomodoroPopup] = useState<boolean>(false);
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
@@ -82,6 +95,11 @@ export default function App() {
           setInstagramSettings(settings.instagramSettings);
         }
         
+        // Load Video Overlay settings if they exist
+        if (settings.videoOverlaySettings) {
+          setVideoOverlaySettings(settings.videoOverlaySettings);
+        }
+        
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
       })
@@ -141,6 +159,20 @@ export default function App() {
     }));
   };
 
+  const handleVideoOverlaySettingToggle = (setting: 'enabled' | 'autoPlayOnReveal') => {
+    setVideoOverlaySettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
+  };
+
+  const handleVideoOverlaySettingChange = (setting: 'opacity' | 'buttonText' | 'buttonColor', value: number | string) => {
+    setVideoOverlaySettings(prev => ({
+      ...prev,
+      [setting]: value
+    }));
+  };
+
   const saveCustomLimit = () => {
     if (!editingSite) return;
     
@@ -155,7 +187,7 @@ export default function App() {
       });
     }
     
-    if (isEditingYoutube) {
+    if (isEditingYoutube || isEditingXCom) {
       browser.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
         maxScrolls,
@@ -164,7 +196,8 @@ export default function App() {
           {...customLimits, [editingSite]: limit} : 
           {...customLimits},
         youtubeSettings,
-        instagramSettings
+        instagramSettings,
+        videoOverlaySettings
       })
       .then(() => {
         setSaveStatus('Saved!');
@@ -195,7 +228,8 @@ export default function App() {
       resetInterval,
       customLimits,
       youtubeSettings,
-      instagramSettings
+      instagramSettings,
+      videoOverlaySettings
     })
       .then(() => {
         setSaveStatus('Saved!');
@@ -314,6 +348,7 @@ export default function App() {
   };
 
   const isEditingYoutube = editingSite?.includes('youtube.com') || false;
+  const isEditingXCom = editingSite?.includes('x.com') || false;
 
   const toggleEditMode = () => {
     setEditMode(!editMode);
@@ -996,6 +1031,200 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {isEditingXCom && (
+              <div style={{
+                marginBottom: '20px',
+                padding: '16px',
+                background: 'linear-gradient(145deg, var(--accent-light) 0%, rgba(255, 255, 255, 0.8) 100%)',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)'
+              }}>
+                <h4 style={{
+                  margin: '0 0 16px', 
+                  color: 'var(--text-color)', 
+                  fontSize: '16px', 
+                  fontWeight: '600',
+                  borderBottom: '2px solid var(--primary-color)',
+                  paddingBottom: '8px'
+                }}>Video Overlay Settings</h4>
+                
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500'}}>Enable Video Overlay</label>
+                  <div 
+                    onClick={() => handleVideoOverlaySettingToggle('enabled')}
+                    style={{
+                      position: 'relative',
+                      display: 'inline-block',
+                      width: '40px',
+                      height: '20px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={videoOverlaySettings.enabled}
+                      onChange={() => {}}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span 
+                      style={{
+                        position: 'absolute',
+                        cursor: 'pointer',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: videoOverlaySettings.enabled ? 'var(--primary-color)' : '#ccc',
+                        borderRadius: '34px',
+                        transition: '.4s'
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '16px',
+                          width: '16px',
+                          left: videoOverlaySettings.enabled ? '22px' : '2px',
+                          bottom: '2px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '50%',
+                          transition: '.4s'
+                        }}
+                      />
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500'}}>Auto-play on Reveal</label>
+                  <div 
+                    onClick={() => handleVideoOverlaySettingToggle('autoPlayOnReveal')}
+                    style={{
+                      position: 'relative',
+                      display: 'inline-block',
+                      width: '40px',
+                      height: '20px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={videoOverlaySettings.autoPlayOnReveal}
+                      onChange={() => {}}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span 
+                      style={{
+                        position: 'absolute',
+                        cursor: 'pointer',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: videoOverlaySettings.autoPlayOnReveal ? 'var(--primary-color)' : '#ccc',
+                        borderRadius: '34px',
+                        transition: '.4s'
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '16px',
+                          width: '16px',
+                          left: videoOverlaySettings.autoPlayOnReveal ? '22px' : '2px',
+                          bottom: '2px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '50%',
+                          transition: '.4s'
+                        }}
+                      />
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{marginBottom: '12px'}}>
+                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500', display: 'block', marginBottom: '6px'}}>
+                    Overlay Opacity: {Math.round(videoOverlaySettings.opacity * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="1"
+                    step="0.1"
+                    value={videoOverlaySettings.opacity}
+                    onChange={(e) => handleVideoOverlaySettingChange('opacity', parseFloat(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: '6px',
+                      borderRadius: '3px',
+                      background: '#ddd',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </div>
+
+                <div style={{marginBottom: '12px'}}>
+                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500', display: 'block', marginBottom: '6px'}}>
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    value={videoOverlaySettings.buttonText}
+                    onChange={(e) => handleVideoOverlaySettingChange('buttonText', e.target.value)}
+                    placeholder="View Video"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--input-border)',
+                      fontSize: '14px',
+                      backgroundColor: 'var(--input-bg)',
+                      color: 'var(--text-color)'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500', display: 'block', marginBottom: '6px'}}>
+                    Button Color
+                  </label>
+                  <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                    <input
+                      type="color"
+                      value={videoOverlaySettings.buttonColor}
+                      onChange={(e) => handleVideoOverlaySettingChange('buttonColor', e.target.value)}
+                      style={{
+                        width: '40px',
+                        height: '30px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={videoOverlaySettings.buttonColor}
+                      onChange={(e) => handleVideoOverlaySettingChange('buttonColor', e.target.value)}
+                      placeholder="#1DA1F2"
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--input-border)',
+                        fontSize: '14px',
+                        backgroundColor: 'var(--input-bg)',
+                        color: 'var(--text-color)'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div style={{display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '8px'}}>
               <button 
                 onClick={() => setEditingSite(null)} 

@@ -22,6 +22,418 @@ interface AIAnalysisResponse {
   break_suggestion?: string;
 }
 
+// Video overlay configuration interface
+interface VideoOverlayConfig {
+  enabled: boolean;
+  opacity: number;
+  autoPlayOnReveal: boolean;
+  buttonText: string;
+  buttonColor: string;
+}
+
+// Video overlay manager class
+class VideoOverlayManager {
+  private config: VideoOverlayConfig;
+  private observer: MutationObserver | null = null;
+  private processedVideos = new WeakSet<Element>();
+  private intersectionObserver: IntersectionObserver | null = null;
+  private styleElement: HTMLStyleElement | null = null;
+  
+  constructor(config: VideoOverlayConfig) {
+    this.config = config;
+    this.initializeStyles();
+    this.createIntersectionObserver();
+  }
+  
+  private initializeStyles(): void {
+    // Remove existing styles if any
+    if (this.styleElement) {
+      this.styleElement.remove();
+    }
+    
+    this.styleElement = document.createElement('style');
+    this.styleElement.id = 'x-video-overlay-styles';
+    this.styleElement.textContent = `
+      .x-video-container {
+        position: relative !important;
+        display: inline-block !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      
+      .x-video-overlay {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        background: rgba(0, 0, 0, ${this.config.opacity}) !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        z-index: 10 !important;
+        cursor: pointer !important;
+        transition: opacity 0.2s ease !important;
+        border-radius: inherit !important;
+      }
+      
+      .x-video-overlay:hover {
+        background: rgba(0, 0, 0, ${Math.min(this.config.opacity + 0.1, 1)}) !important;
+      }
+      
+      .x-video-overlay.hidden {
+        display: none !important;
+      }
+      
+      .x-view-video-btn {
+        background: ${this.config.buttonColor} !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 24px !important;
+        border-radius: 24px !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        pointer-events: auto !important;
+      }
+      
+      .x-view-video-btn:hover {
+        background: #1a91da !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      .x-view-video-btn:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+      }
+      
+      /* Ensure videos don't interfere with overlay */
+      .x-video-container video {
+        pointer-events: none !important;
+      }
+      
+      .x-video-container.revealed video {
+        pointer-events: auto !important;
+      }
+      
+      /* Handle different video container types */
+      [data-testid="videoPlayer"] .x-video-overlay,
+      [data-testid="VideoPlayer"] .x-video-overlay,
+      .video-player .x-video-overlay,
+      .Video .x-video-overlay {
+        border-radius: 16px !important;
+      }
+      
+      /* Mobile responsiveness */
+      @media (max-width: 768px) {
+        .x-view-video-btn {
+          padding: 10px 20px !important;
+          font-size: 14px !important;
+        }
+      }
+      
+      /* Handle promoted content */
+      [data-testid="placementTracking"] .x-video-overlay {
+        background: rgba(0, 0, 0, ${Math.min(this.config.opacity + 0.1, 1)}) !important;
+      }
+      
+      [data-testid="placementTracking"] .x-view-video-btn::after {
+        content: " (Ad)" !important;
+        font-size: 12px !important;
+        opacity: 0.8 !important;
+      }
+    `;
+    
+    document.head.appendChild(this.styleElement);
+  }
+  
+  private createIntersectionObserver(): void {
+    // Use IntersectionObserver for performance - only process visible videos
+    this.intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            this.processVideoElement(entry.target);
+          }
+        });
+      },
+      {
+        rootMargin: '50px', // Start processing videos 50px before they enter viewport
+        threshold: 0.1
+      }
+    );
+  }
+  
+  public initialize(): void {
+    if (!this.isXdotCom()) {
+      return;
+    }
+    
+    console.log('VIDEO OVERLAY: Initializing video overlay manager for X.com');
+    
+    // Process existing videos
+    this.scanForVideos();
+    
+    // Start observing for new videos
+    this.startMutationObserver();
+  }
+  
+  private isXdotCom(): boolean {
+    return window.location.hostname.includes('x.com') || window.location.hostname.includes('twitter.com');
+  }
+  
+  private scanForVideos(): void {
+    // Multiple selectors to catch different video types
+    const videoSelectors = [
+      'video',
+      '[data-testid="videoPlayer"] video',
+      '[data-testid="VideoPlayer"] video',
+      '.video-player video',
+      '.Video video',
+      '[data-testid="placementTracking"] video', // Promoted videos
+      '.media-inline video' // Inline media
+    ];
+    
+    videoSelectors.forEach(selector => {
+      const videos = document.querySelectorAll(selector);
+      videos.forEach(video => {
+        if (this.intersectionObserver && !this.processedVideos.has(video)) {
+          this.intersectionObserver.observe(video);
+        }
+      });
+    });
+  }
+  
+  private startMutationObserver(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+    }
+    
+    this.observer = new MutationObserver((mutations) => {
+      let shouldScan = false;
+      
+      mutations.forEach(mutation => {
+        // Check for new nodes containing videos
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as Element;
+            
+            // Check if the added node is a video or contains videos
+            if (element.tagName === 'VIDEO' || element.querySelector('video')) {
+              shouldScan = true;
+            }
+            
+            // Check for X.com specific video containers
+            if (element.matches('[data-testid*="video"], [data-testid*="Video"], .video-player, .Video') ||
+                element.querySelector('[data-testid*="video"], [data-testid*="Video"], .video-player, .Video')) {
+              shouldScan = true;
+            }
+          }
+        });
+      });
+      
+      if (shouldScan) {
+        // Debounce scanning to avoid excessive processing
+        setTimeout(() => this.scanForVideos(), 100);
+      }
+    });
+    
+    this.observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+  
+  private processVideoElement(videoElement: Element): void {
+    if (!videoElement || this.processedVideos.has(videoElement)) {
+      return;
+    }
+    
+    const video = videoElement as HTMLVideoElement;
+    
+    // Mark as processed
+    this.processedVideos.add(video);
+    
+    // Find the appropriate container for the overlay
+    const container = this.findVideoContainer(video);
+    if (!container) {
+      console.warn('VIDEO OVERLAY: Could not find suitable container for video');
+      return;
+    }
+    
+    // Create overlay
+    this.createVideoOverlay(video, container);
+  }
+  
+  private findVideoContainer(video: HTMLVideoElement): Element | null {
+    // Look for X.com specific video containers
+    let current = video.parentElement;
+    
+    while (current && current !== document.body) {
+      // Check for X.com video containers
+      if (current.matches('[data-testid*="video"], [data-testid*="Video"], .video-player, .Video, .media-inline') ||
+          current.hasAttribute('data-testid') && current.getAttribute('data-testid')?.includes('video')) {
+        return current;
+      }
+      
+      // If we find a container with specific dimensions, use it
+      const style = window.getComputedStyle(current);
+      if (style.position === 'relative' || style.position === 'absolute') {
+        const rect = current.getBoundingClientRect();
+        if (rect.width > 100 && rect.height > 100) {
+          return current;
+        }
+      }
+      
+      current = current.parentElement;
+    }
+    
+    // Fallback: use video's direct parent
+    return video.parentElement;
+  }
+  
+  private createVideoOverlay(video: HTMLVideoElement, container: Element): void {
+    // Check if overlay already exists
+    if (container.querySelector('.x-video-overlay')) {
+      return;
+    }
+    
+    // Ensure container has relative positioning
+    const containerElement = container as HTMLElement;
+    if (window.getComputedStyle(containerElement).position === 'static') {
+      containerElement.style.position = 'relative';
+    }
+    
+    // Add container class
+    containerElement.classList.add('x-video-container');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'x-video-overlay';
+    
+    // Create button
+    const button = document.createElement('button');
+    button.className = 'x-view-video-btn';
+    button.textContent = this.config.buttonText;
+    button.setAttribute('aria-label', 'Click to reveal and play video');
+    
+    // Handle click events
+    const handleClick = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.revealVideo(video, overlay, containerElement);
+    };
+    
+    button.addEventListener('click', handleClick);
+    overlay.addEventListener('click', handleClick);
+    
+    // Append button to overlay
+    overlay.appendChild(button);
+    
+    // Append overlay to container
+    containerElement.appendChild(overlay);
+    
+    // Prevent video autoplay by default
+    if (video.autoplay) {
+      video.autoplay = false;
+    }
+    
+    // Pause the video if it's playing
+    if (!video.paused) {
+      video.pause();
+    }
+    
+    console.log('VIDEO OVERLAY: Created overlay for video in container', containerElement);
+  }
+  
+  private revealVideo(video: HTMLVideoElement, overlay: HTMLElement, container: HTMLElement): void {
+    // Hide overlay
+    overlay.classList.add('hidden');
+    
+    // Mark container as revealed
+    container.classList.add('revealed');
+    
+    // Handle auto-play setting
+    if (this.config.autoPlayOnReveal) {
+      video.play().catch(error => {
+        console.log('VIDEO OVERLAY: Could not auto-play video (this is normal):', error);
+      });
+    }
+    
+    console.log('VIDEO OVERLAY: Video revealed');
+    
+    // Send analytics event if needed
+    this.trackVideoReveal(video);
+  }
+  
+  private trackVideoReveal(video: HTMLVideoElement): void {
+    // Optional: Track video reveals for analytics
+    try {
+      const videoData = {
+        src: video.src || video.currentSrc,
+        duration: video.duration,
+        timestamp: Date.now(),
+        url: window.location.href
+      };
+      
+      console.log('VIDEO OVERLAY: Video revealed:', videoData);
+    } catch (error) {
+      // Ignore tracking errors
+    }
+  }
+  
+  public updateConfig(newConfig: Partial<VideoOverlayConfig>): void {
+    this.config = { ...this.config, ...newConfig };
+    this.initializeStyles();
+  }
+  
+  public destroy(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    
+    if (this.intersectionObserver) {
+      this.intersectionObserver.disconnect();
+      this.intersectionObserver = null;
+    }
+    
+    if (this.styleElement) {
+      this.styleElement.remove();
+      this.styleElement = null;
+    }
+    
+    // Remove all overlays
+    document.querySelectorAll('.x-video-overlay').forEach(overlay => {
+      overlay.remove();
+    });
+    
+    // Remove container classes
+    document.querySelectorAll('.x-video-container').forEach(container => {
+      container.classList.remove('x-video-container', 'revealed');
+    });
+    
+    console.log('VIDEO OVERLAY: Manager destroyed');
+  }
+  
+  public getStats(): { totalVideos: number, revealedVideos: number } {
+    const totalVideos = document.querySelectorAll('.x-video-container').length;
+    const revealedVideos = document.querySelectorAll('.x-video-container.revealed').length;
+    
+    return { totalVideos, revealedVideos };
+  }
+}
+
 // Simplified scraper class
 class GeneralScraper {
   private config: ScrapingConfig;
@@ -324,6 +736,16 @@ export default defineContentScript({
     let scrollStartTime = Date.now();
     let aiAnalysisEnabled = true; // Default enabled
     let hasTriggeredAIAnalysis = false; // Prevent multiple analyses per session
+    
+    // Video Overlay variables
+    let videoOverlayManager: VideoOverlayManager | null = null;
+    let videoOverlaySettings = {
+      enabled: true,
+      opacity: 0.9,
+      autoPlayOnReveal: false,
+      buttonText: 'View Video',
+      buttonColor: '#1DA1F2'
+    };
     
     // YouTube-specific settings
     let youtubeSettings = {
@@ -754,7 +1176,10 @@ export default defineContentScript({
         distractingSites = message.distractingSites;        resetInterval = message.resetInterval;
         customLimits = message.customLimits || {};
         youtubeSettings = message.youtubeSettings || { hideShorts: false, hideHomeFeed: false };
-        instagramSettings = message.instagramSettings || { hideReels: false };        // Apply YouTube-specific settings if needed
+        instagramSettings = message.instagramSettings || { hideReels: false };
+        videoOverlaySettings = message.videoOverlaySettings || videoOverlaySettings;
+        
+        // Apply YouTube-specific settings if needed
         if (currentHost.includes('youtube.com')) {
           injectYoutubeStylesheet();
           setupYoutubeObserver();
@@ -764,6 +1189,18 @@ export default defineContentScript({
         // Apply Instagram-specific settings if needed
         if (currentHost.includes('instagram.com')) {
           handleInstagramReelsRedirect();
+        }
+        
+        // Update Video Overlay Manager if needed
+        if (currentHost.includes('x.com') || currentHost.includes('twitter.com')) {
+          if (videoOverlaySettings.enabled && videoOverlayManager) {
+            videoOverlayManager.updateConfig(videoOverlaySettings);
+          } else if (videoOverlaySettings.enabled && !videoOverlayManager) {
+            initializeVideoOverlay();
+          } else if (!videoOverlaySettings.enabled && videoOverlayManager) {
+            videoOverlayManager.destroy();
+            videoOverlayManager = null;
+          }
         }
         
         // Update the counter
@@ -1040,7 +1477,14 @@ export default defineContentScript({
         lastResetTime: Date.now(),        customLimits: {}, // Custom scroll limits per domain
         youtubeSettings: { hideShorts: false, hideHomeFeed: false }, // YouTube-specific settings
         instagramSettings: { hideReels: false }, // Instagram-specific settings
-        adBlockerCompatMode: true // Enable compatibility mode for ad blockers
+        adBlockerCompatMode: true, // Enable compatibility mode for ad blockers
+        videoOverlaySettings: { // Video overlay settings for X.com
+          enabled: true,
+          opacity: 0.9,
+          autoPlayOnReveal: false,
+          buttonText: 'View Video',
+          buttonColor: '#1DA1F2'
+        }
       });
       
       maxScrolls = result.maxScrolls;
@@ -1050,6 +1494,7 @@ export default defineContentScript({
       youtubeSettings = result.youtubeSettings;
       instagramSettings = result.instagramSettings;
       adBlockerCompatMode = result.adBlockerCompatMode;
+      videoOverlaySettings = result.videoOverlaySettings;
       
       // Only proceed with scroll blocking features if current site is in the distracting sites list
       if (!isDistractingSite()) {
@@ -1070,6 +1515,9 @@ export default defineContentScript({
       
       // Initialize AI Content Analysis
       await initializeAIAnalysis();
+      
+      // Initialize Video Overlay Manager for X.com
+      initializeVideoOverlay();
       
       // Check if we should block based on current count
       const effectiveMax = getEffectiveScrollLimit();
@@ -1105,6 +1553,36 @@ export default defineContentScript({
       
       // Periodically sync scroll count with storage to prevent inconsistencies
       setInterval(syncScrollCount, 10000); // Sync every 10 seconds
+    }
+    
+    // Initialize Video Overlay Manager
+    function initializeVideoOverlay() {
+      if (!videoOverlaySettings.enabled) {
+        console.log('VIDEO OVERLAY: Video overlay disabled');
+        return;
+      }
+      
+      // Only initialize on X.com/Twitter
+      const currentDomain = window.location.hostname.replace(/^www\./, '');
+      if (!currentDomain.includes('x.com') && !currentDomain.includes('twitter.com')) {
+        console.log('VIDEO OVERLAY: Not on X.com/Twitter, skipping video overlay');
+        return;
+      }
+      
+      try {
+        // Destroy existing manager if it exists
+        if (videoOverlayManager) {
+          videoOverlayManager.destroy();
+        }
+        
+        // Create new video overlay manager
+        videoOverlayManager = new VideoOverlayManager(videoOverlaySettings);
+        videoOverlayManager.initialize();
+        
+        console.log('VIDEO OVERLAY: Manager initialized successfully for X.com');
+      } catch (error) {
+        console.error('VIDEO OVERLAY: Failed to initialize:', error);
+      }
     }
     
     // Initialize AI Content Analysis system
