@@ -48,6 +48,14 @@ Modern digital platforms are engineered to maximize engagement and keep users sc
 - **Mental Fatigue**: Constant stimulation leading to decreased focus and increased stress
 - **Time Mismanagement**: Difficulty controlling time spent on social media and entertainment sites
 - **Addictive Behaviors**: Developing unhealthy relationships with digital content consumption
+- 
+- 📊 Track your scrolling activity 
+- 🛑 Set custom scroll limits to prevent endless doomscrolling
+- 📱 Visual indicators showing your current scroll progress
+- 🔄 pomodoro to help you quickly focus on tasks without any burnout
+- ⏱️ Optional auto-reset timer to refresh counters automatically
+- ⚙️ Customizable blocklist to manage which sites are monitored
+- 🚫 Block YouTube Shorts and homepage to reduce distractions and time waste
 
 NoMoScroll addresses these challenges through intelligent intervention, content awareness, and personalized digital wellness features that help you browse with intention rather than impulse.
 
