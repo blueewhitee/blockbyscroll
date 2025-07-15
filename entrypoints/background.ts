@@ -1,5 +1,7 @@
 export default defineBackground(() => {
-  console.log('ScrollStop background initialized', { id: browser.runtime.id });
+  console.log('🚀 ScrollStop background script initialized', { id: browser.runtime.id });
+  console.log('📋 Background script timestamp:', new Date().toISOString());
+  console.log('🔧 Background script ready to handle messages');
 
   // Track active scroll count operations to prevent race conditions
   const pendingOperations = new Map<string, boolean>(); // Added type
@@ -51,6 +53,13 @@ export default defineBackground(() => {
         },
         instagramSettings: {  // Instagram-specific settings
           hideReels: false
+        },
+        videoOverlaySettings: {  // Video overlay settings for X.com
+          enabled: true,
+          opacity: 0.9,
+          autoPlayOnReveal: false,
+          buttonText: 'View Video',
+          buttonColor: '#1DA1F2'
         }
       });
       console.log('ScrollStop: Default settings initialized');
@@ -90,6 +99,150 @@ export default defineBackground(() => {
     });
   }
 
+  // Handle break completion and auto-restart
+  async function handleBreakCompletion(breakMinutes: number) {
+    try {
+      // Reset scroll counters
+      const result = await browser.storage.sync.get(['distractingSites', 'scrollCounts']);
+      const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com'];
+      const scrollCounts: Record<string, number> = result.scrollCounts || {};
+      const resetTime = Date.now();
+      
+      // Reset all domain-specific counters
+      sites.forEach((site: string) => {
+        scrollCounts[site] = 0;
+      });
+      
+      // Save the reset counters
+      await browser.storage.sync.set({ 
+        scrollCounts: scrollCounts,
+        lastResetTime: resetTime
+      });
+      
+      // Show notification when break is complete
+      try {
+        browser.notifications.create({
+          type: 'basic',
+          iconUrl: browser.runtime.getURL('/icon/128.jpg'),
+          title: 'Break Complete!',
+          message: `Your ${breakMinutes} minute break is over.`
+        });
+      } catch (notificationError) {
+        console.log('BACKGROUND: Break completion notification failed (this is normal):', notificationError);
+      }
+      
+      console.log(`BACKGROUND: Break over, automatically starting new Pomodoro`);
+      
+      // Automatically restart the Pomodoro timer with the previous duration
+      const minutes = lastPomodoroWorkDuration;
+      
+      // Convert minutes to milliseconds
+      const pomodoroTime = minutes * 60 * 1000;
+      
+      // Save pomodoro end time and status
+      pomodoroEndTime = Date.now() + pomodoroTime;
+      isPomodoroActive = true;
+      isBreakActive = false; // It's a work session now
+      pomodoroDuration = minutes;
+      
+      // Create update message for new Pomodoro
+      const now = Date.now();
+      const remainingTime = Math.max(0, pomodoroEndTime - now);
+      const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
+      const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+      
+      const updateMessage = {
+        type: 'POMODORO_UPDATE',
+        remaining: {
+          total: remainingTime,
+          minutes: remainingMinutes,
+          seconds: remainingSeconds
+        },
+        duration: pomodoroDuration,
+        isActive: true,
+        forceDisplay: true // Force display of the overlay
+      };
+      
+      // Send update to all tabs
+      updateAllContentScripts(updateMessage);
+      
+      // Notify content script about the auto-start of new Pomodoro
+      updateAllContentScripts({
+        type: 'BREAK_COMPLETE_NOTIFICATION',
+        lastPomodoroWorkDuration: minutes,
+        lastResetTime: resetTime
+      });
+
+      // Start sending updates to content scripts
+      updatePomodoroStatus();
+
+      // Set new pomodoro timer for the auto-started Pomodoro 
+      pomodoroTimer = setTimeout(() => {
+        handlePomodoroCompletion();
+      }, pomodoroTime);
+      
+    } catch (error) {
+      console.error('BACKGROUND: Error in handleBreakCompletion:', error);
+      // Fallback: just notify that break is complete without auto-restart
+      updateAllContentScripts({
+        type: 'BREAK_COMPLETE_NOTIFICATION',
+        lastPomodoroWorkDuration: lastPomodoroWorkDuration,
+        lastResetTime: Date.now()
+      });
+    }
+  }
+
+  // Handle pomodoro completion (extracted to reusable function)
+  function handlePomodoroCompletion() {
+    console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
+    pomodoroTimer = null;
+    
+    // Show the completion popup
+    console.log(`BACKGROUND: Pomodoro completed, showing prompt immediately.`);
+    
+    // Set flag to indicate we're waiting for user choice
+    isWaitingForCompletionChoice = true;
+    
+    try {
+      browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('/icon/128.jpg'),
+        title: 'Pomodoro Complete!',
+        message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
+      });
+    } catch (notificationError) {
+      console.log('BACKGROUND: Notification creation failed (this is normal):', notificationError);
+    }
+    
+    updateAllContentScripts({
+      type: 'POMODORO_COMPLETE_PROMPT',
+      duration: pomodoroDuration,
+      forceDisplay: true
+    });
+    
+    // Start fallback timer
+    if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
+    pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
+      if (isWaitingForCompletionChoice) {
+        try {
+          const params = new URLSearchParams({
+              action: 'pomodoro_complete',
+              duration: pomodoroDuration.toString(),
+              completedAt: Date.now().toString()
+          }).toString();
+          browser.windows.create({
+              url: browser.runtime.getURL(`/popup/index.html?${params}` as any),
+              type: 'popup', width: 420, height: 350
+          });
+        } catch (popupError) {
+          console.log('BACKGROUND: Popup creation failed:', popupError);
+        }
+        isWaitingForCompletionChoice = false;
+        isPomodoroActive = false;
+      }
+    }, 10000);
+  }
+
   // Check and update pomodoro timer status
   function updatePomodoroStatus() {
     if (!isPomodoroActive) return;
@@ -125,8 +278,109 @@ export default defineBackground(() => {
 
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('📨 BACKGROUND: Received message:', { type: message.type, sender: sender.tab?.url });
+    
+    // Test message handler to verify message passing works
+    if (message.type === 'TEST_BACKGROUND') {
+      console.log('✅ BACKGROUND: Test message received successfully');
+      sendResponse({ success: true, message: 'Background script is working!' });
+      return true;
+    }
+    
+    if (message.type === 'TEST_BACKEND_CONNECTION') {
+      (async () => {
+        try {
+          const response = await fetch('https://nomoscroll-backend-815059150602.asia-south1.run.app/api/test');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.connected) {
+              sendResponse({ success: true, connected: true });
+              return;
+            }
+          }
+          sendResponse({ success: false, connected: false });
+        } catch (error: any) {
+          console.error('BACKGROUND: Backend connection test failed:', error);
+          sendResponse({ success: false, connected: false, error: error.message });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
+    
+    // Handle AI content analysis requests
+    if (message.type === 'AI_ANALYZE_CONTENT') {
+      (async () => {
+        try {
+          // Validate payload
+          if (!message.content || typeof message.content !== 'string' || !message.context) {
+            throw new Error('Invalid payload format');
+          }
+
+          // Timeout setup (15 seconds to prevent hanging)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.error('⏰ BACKGROUND: Fetch timeout after 15s');
+          }, 15000);
+
+          console.log('📤 BACKGROUND: Sending to backend:', {
+            contentPreview: message.content.substring(0, 100) + '...',
+            context: message.context
+          });
+
+          const response = await fetch('https://nomoscroll-backend-815059150602.asia-south1.run.app/api/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content: message.content,
+              context: message.context,
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ BACKGROUND: Backend error:', errorText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log('✅ BACKGROUND: Backend response:', data);
+
+          // Relaxed validation: Check for success and data, ignore extra fields like timestamp/requestId
+          if (data.success && data.data) {
+            console.log('✅ BACKGROUND: Valid response format');
+            sendResponse({ success: true, analysis: data.data });
+          } else {
+            console.error('❌ BACKGROUND: Invalid response format:', data);
+            throw new Error('Invalid response format from backend');
+          }
+        } catch (error: any) { // Fixed linter error by typing as any
+          console.error('❌ BACKGROUND: API call failed:', error?.message || 'Unknown error', error?.stack);
+          sendResponse({
+            success: false,
+            error: error?.message || 'Unknown error',
+            analysis: {
+              content_type: 'unknown',
+              confidence_score: 0,
+              educational_value: 5,
+              addiction_risk: 5,
+              recommended_action: 'maintain_limit',
+              bonus_scrolls: 0,
+              reasoning: 'API unavailable, maintaining original scroll limit'
+            }
+          });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
+
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings']).then(sendResponse);
       return true; // Required for async response
     }
     
@@ -136,7 +390,8 @@ export default defineBackground(() => {
         resetInterval: message.resetInterval,
         customLimits: message.customLimits || {},
         youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
-        instagramSettings: message.instagramSettings || { hideReels: false }
+        instagramSettings: message.instagramSettings || { hideReels: false },
+        videoOverlaySettings: message.videoOverlaySettings || { enabled: true, opacity: 0.9, autoPlayOnReveal: false, buttonText: 'View Video', buttonColor: '#1DA1F2' }
       }).then(() => {
         // Notify content script about updated settings
         updateAllContentScripts({
@@ -146,7 +401,8 @@ export default defineBackground(() => {
           resetInterval: message.resetInterval,
           customLimits: message.customLimits || {},
           youtubeSettings: message.youtubeSettings || { hideShorts: false, hideHomeFeed: false },
-          instagramSettings: message.instagramSettings || { hideReels: false }
+          instagramSettings: message.instagramSettings || { hideReels: false },
+          videoOverlaySettings: message.videoOverlaySettings || { enabled: true, opacity: 0.9, autoPlayOnReveal: false, buttonText: 'View Video', buttonColor: '#1DA1F2' }
         });
         
         sendResponse({ success: true });
@@ -262,67 +518,7 @@ export default defineBackground(() => {
       
       // Set new pomodoro timer
       pomodoroTimer = setTimeout(() => {
-        console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
-        pomodoroTimer = null;
-        // isPomodoroActive will be set to false by START_BREAK, STOP_POMODORO_AND_RESET, or the fallback.
-
-        // Always execute completion flow - don't wrap in try/catch to avoid errors
-        console.log(`BACKGROUND: Pomodoro completed, showing prompt immediately.`);
-        
-        // Set flag to indicate we're waiting for user choice
-        isWaitingForCompletionChoice = true;
-        
-        // Show a notification that the Pomodoro is complete (with error handling)
-        try {
-          browser.notifications.create({
-            type: 'basic',
-            iconUrl: browser.runtime.getURL('/icon/128.jpg'),
-            title: 'Pomodoro Complete!',
-            message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
-          });
-        } catch (notificationError) {
-          console.log('BACKGROUND: Notification creation failed (this is normal):', notificationError);
-        }
-        
-        // Ensure pomodoro completion is visible on all tabs immediately
-        updateAllContentScripts({
-          type: 'POMODORO_COMPLETE_PROMPT',
-          duration: pomodoroDuration,
-          forceDisplay: true
-        });
-        
-        console.log('BACKGROUND: POMODORO_COMPLETE_PROMPT sent immediately.');
-
-        // Start a fallback timer. If no response from content script (modal interaction)
-        // within a certain period, open the popup as a fallback.
-        if (pomodoroCompletionPromptFallbackTimer) {
-          clearTimeout(pomodoroCompletionPromptFallbackTimer);
-        }
-        pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
-          console.log('BACKGROUND: Fallback timer expired. No interaction from in-page prompt detected.');
-          // Check if we're still waiting for user choice
-          if (isWaitingForCompletionChoice) {
-              console.log('BACKGROUND: Opening popup as fallback for pomodoro completion choice.');
-              try {
-                const params = new URLSearchParams({
-                    action: 'pomodoro_complete',
-                    duration: pomodoroDuration.toString(),
-                    completedAt: Date.now().toString()
-                }).toString();
-                browser.windows.create({
-                    url: browser.runtime.getURL(`/popup/index.html?${params}` as any), // Cast to any to bypass strict WXT typing for query params
-                    type: 'popup',
-                    width: 420, // Slightly wider for better text fit
-                    height: 350 // Slightly taller for better text fit
-                });
-              } catch (popupError) {
-                console.log('BACKGROUND: Popup creation failed:', popupError);
-              }
-              // After triggering fallback, clear the waiting flag
-              isWaitingForCompletionChoice = false;
-              isPomodoroActive = false;
-          }
-        }, 10 * 1000); // 10-second fallback timer for testing
+        handlePomodoroCompletion();
       }, pomodoroTime);
       
       // Show notification that pomodoro started
@@ -387,125 +583,8 @@ export default defineBackground(() => {
       
       // Set new timer for break
       pomodoroTimer = setTimeout(() => {
-        // When break is done
-        browser.storage.sync.get(['distractingSites', 'scrollCounts']).then(result => {
-          const sites: string[] = result.distractingSites || ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Added type
-          const scrollCounts: Record<string, number> = result.scrollCounts || {}; // Added type
-          const resetTime = Date.now();
-          
-          // Reset all domain-specific counters
-          sites.forEach((site: string) => { // Added type for site
-            scrollCounts[site] = 0;
-          });
-          
-          // Save the reset counters
-          browser.storage.sync.set({ 
-            scrollCounts: scrollCounts,
-            lastResetTime: resetTime
-          }).then(() => {
-            // Show notification when break is complete
-            browser.notifications.create({
-              type: 'basic',
-              iconUrl: browser.runtime.getURL('/icon/128.jpg'),
-              title: 'Break Complete!',
-              message: `Your ${breakMinutes} minute break is over.`
-            });
-            
-            console.log(`BACKGROUND: Break over, automatically starting new Pomodoro`);
-            
-            // Automatically restart the Pomodoro timer with the previous duration
-            // instead of showing a prompt
-            const minutes = lastPomodoroWorkDuration;
-            
-            // Convert minutes to milliseconds
-            const pomodoroTime = minutes * 60 * 1000;
-            
-            // Save pomodoro end time and status
-            pomodoroEndTime = Date.now() + pomodoroTime;
-            isPomodoroActive = true;
-            isBreakActive = false; // It's a work session now
-            pomodoroDuration = minutes;
-            
-            // Create update message for new Pomodoro
-            const now = Date.now();
-            const remainingTime = Math.max(0, pomodoroEndTime - now);
-            const remainingMinutes = Math.floor(remainingTime / (60 * 1000));
-            const remainingSeconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
-            
-            const updateMessage = {
-              type: 'POMODORO_UPDATE',
-              remaining: {
-                total: remainingTime,
-                minutes: remainingMinutes,
-                seconds: remainingSeconds
-              },
-              duration: pomodoroDuration,
-              isActive: true,
-              forceDisplay: true // Force display of the overlay
-            };
-            
-            // Send update to all tabs
-            updateAllContentScripts(updateMessage);
-            
-            // Notify content script about the auto-start of new Pomodoro
-            updateAllContentScripts({
-              type: 'BREAK_COMPLETE_NOTIFICATION',
-              lastPomodoroWorkDuration: minutes,
-              lastResetTime: resetTime
-            });
-
-            // Set new pomodoro timer for the auto-started Pomodoro 
-            pomodoroTimer = setTimeout(() => {
-              console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
-              pomodoroTimer = null;
-              
-              // Show the completion popup again (same as in SET_POMODORO)
-              console.log(`BACKGROUND: Pomodoro completed, showing prompt immediately.`);
-              
-              // Set flag to indicate we're waiting for user choice
-              isWaitingForCompletionChoice = true;
-              
-              try {
-                browser.notifications.create({
-                  type: 'basic',
-                  iconUrl: browser.runtime.getURL('/icon/128.jpg'),
-                  title: 'Pomodoro Complete!',
-                  message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
-                });
-              } catch (notificationError) {
-                console.log('BACKGROUND: Notification creation failed (this is normal):', notificationError);
-              }
-              
-              updateAllContentScripts({
-                type: 'POMODORO_COMPLETE_PROMPT',
-                duration: pomodoroDuration,
-                forceDisplay: true
-              });
-              
-              // Start fallback timer
-              if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
-              pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
-                if (isWaitingForCompletionChoice) {
-                  try {
-                    const params = new URLSearchParams({
-                        action: 'pomodoro_complete',
-                        duration: pomodoroDuration.toString(),
-                        completedAt: Date.now().toString()
-                    }).toString();
-                    browser.windows.create({
-                        url: browser.runtime.getURL(`/popup/index.html?${params}` as any),
-                        type: 'popup', width: 420, height: 350
-                    });
-                  } catch (popupError) {
-                    console.log('BACKGROUND: Popup creation failed:', popupError);
-                  }
-                  isWaitingForCompletionChoice = false;
-                  isPomodoroActive = false;
-                }
-              }, 10000);
-            }, pomodoroTime);
-          });
-        });
+        // When break is done, handle the auto-restart properly
+        handleBreakCompletion(breakMinutes);
       }, breakTime);
       
       // Show notification that break started
@@ -596,54 +675,7 @@ export default defineBackground(() => {
       updateAllContentScripts(updateMessage);
       
       pomodoroTimer = setTimeout(() => {
-        // Pomodoro completion logic (same as in SET_POMODORO)
-        console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed!`);
-        pomodoroTimer = null;
-        
-        // Show notification that Pomodoro is complete and prompt immediately
-        try {
-          browser.notifications.create({
-            type: 'basic',
-            iconUrl: browser.runtime.getURL('/icon/128.jpg'),
-            title: 'Pomodoro Complete!',
-            message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
-          });
-        } catch (notificationError) {
-          console.log('BACKGROUND: Notification creation failed (this is normal):', notificationError);
-        }
-        
-        // Show the prompt immediately
-        console.log(`BACKGROUND: Showing POMODORO_COMPLETE_PROMPT immediately (from restart).`);
-        
-        // Set flag to indicate we're waiting for user choice
-        isWaitingForCompletionChoice = true;
-        
-        updateAllContentScripts({
-          type: 'POMODORO_COMPLETE_PROMPT',
-          duration: pomodoroDuration,
-          forceDisplay: true
-        });
-        // Fallback timer logic (copied from SET_POMODORO)
-        if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
-        pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
-          if (isWaitingForCompletionChoice) {
-            try {
-              const params = new URLSearchParams({
-                  action: 'pomodoro_complete',
-                  duration: pomodoroDuration.toString(),
-                  completedAt: Date.now().toString()
-              }).toString();
-              browser.windows.create({
-                  url: browser.runtime.getURL(`/popup/index.html?${params}` as any), // Cast to any to bypass strict WXT typing for query params
-                  type: 'popup', width: 420, height: 350
-              });
-            } catch (popupError) {
-              console.log('BACKGROUND: Popup creation failed:', popupError);
-            }
-            isWaitingForCompletionChoice = false;
-            isPomodoroActive = false;
-          }
-        }, 10000); // 10-second fallback timer for testing
+        handlePomodoroCompletion();
       }, pomodoroTime);
 
       browser.notifications.create({
@@ -864,45 +896,7 @@ export default defineBackground(() => {
         updateAllContentScripts(updateMessage);
 
         pomodoroTimer = setTimeout(() => {
-          console.log(`BACKGROUND: Pomodoro timer of ${pomodoroDuration} minutes completed (started by shortcut)!`);
-          pomodoroTimer = null;
-          
-          // Show notification that Pomodoro is complete and prompt immediately
-          browser.notifications.create({
-            type: 'basic',
-            iconUrl: browser.runtime.getURL('/icon/128.jpg'),
-            title: 'Pomodoro Complete!',
-            message: `Your ${pomodoroDuration} minute pomodoro session is complete. Check your page for options!`
-          });
-          
-          // Show the prompt immediately
-          console.log(`BACKGROUND: Showing POMODORO_COMPLETE_PROMPT immediately (from shortcut).`);
-          
-          // Set flag to indicate we're waiting for user choice
-          isWaitingForCompletionChoice = true;
-          
-          updateAllContentScripts({
-            type: 'POMODORO_COMPLETE_PROMPT',
-            duration: pomodoroDuration,
-            forceDisplay: true
-          });
-          // Fallback timer logic (copied from SET_POMODORO)
-          if (pomodoroCompletionPromptFallbackTimer) clearTimeout(pomodoroCompletionPromptFallbackTimer);
-          pomodoroCompletionPromptFallbackTimer = setTimeout(() => {
-            if (isWaitingForCompletionChoice) {
-              const params = new URLSearchParams({
-                  action: 'pomodoro_complete',
-                  duration: pomodoroDuration.toString(),
-                  completedAt: Date.now().toString()
-              }).toString();
-              browser.windows.create({
-                  url: browser.runtime.getURL(`/popup/index.html?${params}` as any),
-                  type: 'popup', width: 420, height: 350
-              });
-              isWaitingForCompletionChoice = false;
-              isPomodoroActive = false;
-            }
-          }, 10 * 1000); // 10-second fallback timer for testing
+          handlePomodoroCompletion();
         }, pomodoroTime);
 
         browser.notifications.create({

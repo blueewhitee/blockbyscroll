@@ -2,12 +2,41 @@
  * Main AI content analyzer that orchestrates the analysis process
  */
 
-import { GeminiProvider, AIAnalysisResponse, AIAnalysisRequest, GeminiConfig } from './providers/gemini-provider';
+import { PatternTracker } from './pattern-tracker';
+
+// Updated interface to support new behavioral analysis
+export interface AIAnalysisResponse {
+  // New primary fields from enhanced backend
+  user_pattern?: 'Deep Focus/Learning' | 'Active Socializing' | 'Intentional Leisure' | 
+                'Casual Browsing/Catch-up' | 'Passive Consumption/Doomscrolling' | 
+                'Anxiety-Driven Information Seeking';
+  addiction_risk: number;
+  educational_value: number;
+  recommended_action: 'session_extension' | 'gentle_reward' | 'maintain_limit' | 
+                     'show_warning' | 'immediate_break' | 'bonus_scrolls'; // Added new actions + legacy
+  bonus_scrolls: number;
+  reasoning: string;
+  break_suggestion?: string;
+  
+  // Legacy fields (optional, for backward compatibility)
+  content_type?: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
+  confidence_score?: number;
+}
+
+export interface AIAnalysisRequest {
+  content: string;
+  context: {
+    scrollCount: number;
+    maxScrolls: number;
+    domain: string;
+    timestamp: number;
+    timeOfDay: string;
+    scrollTime: number; // minutes spent scrolling
+  };
+}
 
 export interface AnalyzerConfig {
   enabled: boolean;
-  provider: 'gemini';
-  geminiConfig: GeminiConfig;
   analysisThreshold: number; // Scrolls remaining to trigger analysis
   cacheEnabled: boolean;
   cacheDurationMs: number;
@@ -34,13 +63,13 @@ interface CacheEntry {
 
 export class AIContentAnalyzer {
   private config: AnalyzerConfig;
-  private provider: GeminiProvider;
   private cache = new Map<string, CacheEntry>();
   private isProcessing = false;
+  private patternTracker: PatternTracker;
 
   constructor(config: AnalyzerConfig) {
     this.config = config;
-    this.provider = new GeminiProvider(config.geminiConfig);
+    this.patternTracker = new PatternTracker();
   }
 
   /**
@@ -90,8 +119,49 @@ export class AIContentAnalyzer {
         }
       };
 
-      // Perform analysis
-      const analysis = await this.provider.analyzeContent(request);
+      // Perform analysis by sending message to background script with retry
+      let response;
+      let lastError;
+      const maxRetries = 2;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`AI ANALYZER: Analysis attempt ${attempt + 1}/${maxRetries + 1}`);
+          
+          response = await Promise.race([
+            browser.runtime.sendMessage({
+              type: 'AI_ANALYZE_CONTENT',
+              content: request.content,
+              context: request.context
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Analysis request timed out after 30 seconds')), 30000)
+            )
+          ]);
+          
+          if (response && response.success) {
+            break; // Success, exit retry loop
+          }
+          
+          lastError = new Error(response?.error || 'Analysis failed in background script');
+          if (attempt < maxRetries) {
+            console.log(`AI ANALYZER: Attempt ${attempt + 1} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
+          }
+        } catch (error) {
+          lastError = error;
+          if (attempt < maxRetries) {
+            console.log(`AI ANALYZER: Attempt ${attempt + 1} failed with error, retrying...`, error);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
+          }
+        }
+      }
+
+      if (!response || !response.success) {
+        throw lastError || new Error('All retry attempts failed');
+      }
+      
+      const analysis = response.analysis;
 
       // Cache the result
       if (this.config.cacheEnabled) {
@@ -129,49 +199,92 @@ export class AIContentAnalyzer {
    */
   public applyRecommendations(
     analysis: AIAnalysisResponse,
-    currentMaxScrolls: number
+    currentMaxScrolls: number,
+    domain: string = '',
+    scrollCount: number = 0
   ): {
     newMaxScrolls: number;
     shouldShowOverlay: boolean;
     overlayMessage: string;
     overlayType: 'warning' | 'encouragement' | 'break';
+    userPattern?: string;
   } {
-    const { recommended_action, bonus_scrolls, reasoning, break_suggestion } = analysis;
+    const { recommended_action, bonus_scrolls, reasoning, break_suggestion, user_pattern } = analysis;
+
+    // Track the user pattern if available
+    if (user_pattern && domain) {
+      this.patternTracker.trackPattern(
+        user_pattern, 
+        domain, 
+        scrollCount, 
+        analysis.addiction_risk || 0, 
+        analysis.educational_value || 0
+      );
+    }
 
     switch (recommended_action) {
-      case 'bonus_scrolls':
+      case 'session_extension':
+        return {
+          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 15), // Default 15-20 scrolls for deep learning
+          shouldShowOverlay: true,
+          overlayMessage: `🎯 Deep Focus Detected! Keep learning! ${reasoning}`,
+          overlayType: 'encouragement',
+          userPattern: user_pattern
+        };
+
+      case 'gentle_reward':
+        return {
+          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 3), // Default 3-5 scrolls for quality content
+          shouldShowOverlay: true,
+          overlayMessage: `😊 Quality Time! Enjoying some quality content! ${reasoning}`,
+          overlayType: 'encouragement',
+          userPattern: user_pattern
+        };
+
+      case 'bonus_scrolls': // Legacy support
         return {
           newMaxScrolls: currentMaxScrolls + bonus_scrolls,
           shouldShowOverlay: true,
           overlayMessage: `🎉 Productive content detected! Added ${bonus_scrolls} bonus scrolls. ${reasoning}`,
-          overlayType: 'encouragement'
+          overlayType: 'encouragement',
+          userPattern: user_pattern
         };
 
       case 'show_warning':
         return {
           newMaxScrolls: currentMaxScrolls,
           shouldShowOverlay: true,
-          overlayMessage: `⚠️ Warning: ${reasoning}. Consider taking a break soon.`,
-          overlayType: 'warning'
+          overlayMessage: `⚠️ Check Your Focus: ${reasoning}. Consider taking a break soon.`,
+          overlayType: 'warning',
+          userPattern: user_pattern
         };
 
       case 'immediate_break':
         return {
           newMaxScrolls: currentMaxScrolls,
           shouldShowOverlay: true,
-          overlayMessage: `🛑 Time for a break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
-          overlayType: 'break'
+          overlayMessage: `🛑 Time for a Break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
+          overlayType: 'break',
+          userPattern: user_pattern
         };
 
       case 'maintain_limit':
       default:
         return {
           newMaxScrolls: currentMaxScrolls,
-          shouldShowOverlay: false,
-          overlayMessage: reasoning,
-          overlayType: 'warning'
+          shouldShowOverlay: true,
+          overlayMessage: `📱 Mindful Browsing: ${reasoning || 'Continue browsing mindfully'}`,
+          overlayType: 'warning',
+          userPattern: user_pattern
         };
     }
+  }
+
+  /**
+   * Get the pattern tracker instance
+   */
+  public getPatternTracker(): PatternTracker {
+    return this.patternTracker;
   }
 
   /**
@@ -247,7 +360,7 @@ export class AIContentAnalyzer {
         timestamp: Date.now(),
         processingTimeMs: Date.now() - startTime,
         contentLength,
-        provider: this.config.provider
+        provider: 'gemini' // This will need to be updated if a new provider is added
       }
     };
   }
@@ -267,7 +380,7 @@ export class AIContentAnalyzer {
         timestamp: Date.now(),
         processingTimeMs: Date.now() - startTime,
         contentLength,
-        provider: this.config.provider
+        provider: 'gemini' // This will need to be updated if a new provider is added
       }
     };
   }
@@ -277,10 +390,6 @@ export class AIContentAnalyzer {
    */
   public updateConfig(newConfig: Partial<AnalyzerConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    
-    if (newConfig.geminiConfig) {
-      this.provider.updateConfig(newConfig.geminiConfig);
-    }
   }
 
   /**
@@ -288,7 +397,9 @@ export class AIContentAnalyzer {
    */
   public async testConnection(): Promise<boolean> {
     try {
-      return await this.provider.testConnection();
+      // Ask background script to test the connection
+      const response = await browser.runtime.sendMessage({ type: 'TEST_BACKEND_CONNECTION' });
+      return response.success && response.connected;
     } catch (error) {
       console.error('AI ANALYZER: Connection test failed:', error);
       return false;
@@ -315,7 +426,7 @@ export class AIContentAnalyzer {
   } {
     return {
       enabled: this.config.enabled,
-      provider: this.config.provider,
+      provider: 'gemini', // This will need to be updated if a new provider is added
       isProcessing: this.isProcessing,
       cacheSize: this.cache.size,
       config: this.config
@@ -331,13 +442,6 @@ export function createAIAnalyzer(config: AnalyzerConfig): AIContentAnalyzer {
 // Default configuration
 export const DEFAULT_ANALYZER_CONFIG: AnalyzerConfig = {
   enabled: true,
-  provider: 'gemini',
-  geminiConfig: {
-    apiKey: 'AIzaSyCYsgshv7TI7I2y5o6O6jvsaiB6PRRa30E',
-    model: 'gemini-1.5-flash',
-    temperature: 0.3,
-    maxTokens: 1000
-  },
   analysisThreshold: 3, // Trigger when 3 scrolls remaining
   cacheEnabled: true,
   cacheDurationMs: 10 * 60 * 1000 // 10 minutes
