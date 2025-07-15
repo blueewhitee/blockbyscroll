@@ -457,6 +457,13 @@ export default defineContentScript({
     let postTriggerScrollCount = 0; // Counter for new analysis logic
     let isAnalysisInProgress = false; // Prevent race conditions
     
+    // Grace period variables for pending analysis
+    let isInGracePeriod = false; // Whether we're in grace period waiting for analysis
+    let gracePeriodScrollsUsed = 0; // How many grace scrolls have been used
+    let maxGracePeriodScrolls = 5; // Maximum extra scrolls allowed during grace period
+    let gracePeriodStartTime = 0; // When grace period started
+    let maxGracePeriodDuration = 15000; // 15 seconds max grace period
+    
     // Video Overlay variables
     let videoOverlayManager: VideoOverlayManager | null = null;
     let videoOverlaySettings = {
@@ -574,6 +581,56 @@ export default defineContentScript({
     overlay.appendChild(overlayMessage);
     overlay.appendChild(overlayHint);
     overlay.appendChild(overlayTimer);
+    
+    // Create pending analysis overlay
+    const pendingOverlay = document.createElement('div');
+    pendingOverlay.id = 'pending-analysis-overlay';
+    pendingOverlay.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, rgba(79, 70, 229, 0.95), rgba(99, 102, 241, 0.95));
+      color: white;
+      padding: 25px 35px;
+      border-radius: 16px;
+      max-width: 450px;
+      text-align: center;
+      z-index: 2147483645;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: none;
+    `;
+    
+    pendingOverlay.innerHTML = `
+      <div style="font-size: 24px; margin-bottom: 15px;">🔍</div>
+      <h3 style="margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">Analyzing Your Session...</h3>
+      <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9; line-height: 1.4;">
+        You've reached your scroll limit. We're checking your activity to see if you deserve bonus scrolls.
+      </p>
+      <div id="grace-period-info" style="font-size: 13px; opacity: 0.8; margin-bottom: 15px;">
+        You may continue for <span id="grace-scrolls-remaining">5</span> more scrolls while we analyze.
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; opacity: 0.7;">
+        <div class="spinner" style="
+          width: 16px; 
+          height: 16px; 
+          border: 2px solid rgba(255,255,255,0.3); 
+          border-top: 2px solid white; 
+          border-radius: 50%; 
+          animation: spin 1s linear infinite;
+        "></div>
+        <span>Please wait...</span>
+      </div>
+      <style>
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    `;
     
     // Create a counter display
     const counter = document.createElement('div');
@@ -887,6 +944,14 @@ export default defineContentScript({
         isAwaitingPostTriggerScrolls = false;
         postTriggerScrollCount = 0;
         isAnalysisInProgress = false;
+        
+        // Reset grace period state
+        if (isInGracePeriod) {
+          endGracePeriod(true);
+        }
+        isInGracePeriod = false;
+        gracePeriodScrollsUsed = 0;
+        
         // Clear scraper buffer
         if (contentScraper) {
           contentScraper.clearBuffer();
@@ -1233,6 +1298,7 @@ export default defineContentScript({
       
       // Add elements to DOM now that we know this is a distracting site
       document.body.appendChild(overlay);
+      document.body.appendChild(pendingOverlay);
       document.body.appendChild(counter);
       counter.style.display = 'block';
       
@@ -1414,11 +1480,17 @@ export default defineContentScript({
         if (analysisResult.success && analysisResult.analysis) {
           console.log('AI CONTENT: Analysis completed:', analysisResult.analysis);
           
-          // Apply AI recommendations
+          // Apply AI recommendations with pattern tracking
+          const domain = getMatchingDomain();
           const recommendations = aiAnalyzer.applyRecommendations(
             analysisResult.analysis,
-            getEffectiveScrollLimit()
+            getEffectiveScrollLimit(),
+            domain,
+            scrollCount
           );
+          
+          // Check if we should end grace period based on results
+          let grantedBonusScrolls = false;
           
           // Update scroll limit if bonus scrolls awarded
           if (recommendations.newMaxScrolls > getEffectiveScrollLimit()) {
@@ -1426,11 +1498,21 @@ export default defineContentScript({
             const bonusScrolls = recommendations.newMaxScrolls - currentLimit;
             
             // Add temporary bonus scrolls for this domain (does not persist across resets)
-            const domain = getMatchingDomain();
             temporaryBonusScrolls[domain] = (temporaryBonusScrolls[domain] || 0) + bonusScrolls;
             
             console.log(`AI CONTENT: Added ${bonusScrolls} temporary bonus scrolls. New effective limit: ${getEffectiveScrollLimit()}`);
             updateCounter();
+            grantedBonusScrolls = true;
+          }
+          
+          // End grace period if active
+          if (isInGracePeriod) {
+            endGracePeriod(true);
+            
+            // If no bonus scrolls were granted and user exceeded their original limit, block now
+            if (!grantedBonusScrolls && scrollCount >= getEffectiveScrollLimit()) {
+              setScrollBlocking(true);
+            }
           }
           
           // Show recommendation overlay if needed
@@ -1438,8 +1520,18 @@ export default defineContentScript({
             showAIRecommendationOverlay(recommendations);
           }
           
+          // Log pattern information if available
+          if (recommendations.userPattern) {
+            console.log(`AI CONTENT: User pattern detected: ${recommendations.userPattern}`);
+          }
+          
         } else {
           console.error('AI CONTENT: Analysis failed:', analysisResult.error);
+          
+          // End grace period on analysis failure
+          if (isInGracePeriod) {
+            endGracePeriod(false);
+          }
         }
         
       } catch (error) {
@@ -1478,7 +1570,68 @@ export default defineContentScript({
       }
     }
 
-    // Show AI recommendation overlay
+    // Grace period management functions
+    function startGracePeriod() {
+      isInGracePeriod = true;
+      gracePeriodScrollsUsed = 0;
+      gracePeriodStartTime = Date.now();
+      
+      // Show pending analysis overlay
+      pendingOverlay.style.display = 'block';
+      updateGracePeriodUI();
+      
+      console.log('GRACE PERIOD: Started - allowing up to', maxGracePeriodScrolls, 'extra scrolls');
+      
+      // Set timeout to end grace period if analysis takes too long
+      setTimeout(() => {
+        if (isInGracePeriod) {
+          console.log('GRACE PERIOD: Timeout - ending grace period');
+          endGracePeriod(false);
+        }
+      }, maxGracePeriodDuration);
+    }
+    
+    function updateGracePeriodUI() {
+      const remainingScrolls = maxGracePeriodScrolls - gracePeriodScrollsUsed;
+      const graceScrollsElement = document.getElementById('grace-scrolls-remaining');
+      if (graceScrollsElement) {
+        graceScrollsElement.textContent = remainingScrolls.toString();
+      }
+    }
+    
+    function endGracePeriod(wasSuccessful: boolean) {
+      if (!isInGracePeriod) return;
+      
+      isInGracePeriod = false;
+      pendingOverlay.style.display = 'none';
+      
+      console.log('GRACE PERIOD: Ended -', wasSuccessful ? 'Analysis completed' : 'Timeout/limit reached');
+      
+      // If grace period ended without success (timeout or limit exceeded), block immediately
+      if (!wasSuccessful) {
+        setScrollBlocking(true);
+      }
+    }
+    
+    function useGraceScroll(): boolean {
+      if (!isInGracePeriod) return false;
+      
+      gracePeriodScrollsUsed++;
+      updateGracePeriodUI();
+      
+      console.log(`GRACE PERIOD: Used ${gracePeriodScrollsUsed}/${maxGracePeriodScrolls} grace scrolls`);
+      
+      // Check if grace period limit exceeded
+      if (gracePeriodScrollsUsed >= maxGracePeriodScrolls) {
+        console.log('GRACE PERIOD: Limit exceeded - ending grace period');
+        endGracePeriod(false);
+        return false;
+      }
+      
+      return true;
+    }
+
+    // Show AI recommendation overlay with enhanced pattern information
     function showAIRecommendationOverlay(recommendations: any) {
       let aiOverlay = document.getElementById('ai-recommendation-overlay');
       
@@ -1488,14 +1641,27 @@ export default defineContentScript({
       
       aiOverlay = document.createElement('div');
       aiOverlay.id = 'ai-recommendation-overlay';
+      
+      // Enhanced styling with pattern-aware colors
+      const getPatternColor = (type: string) => {
+        switch (type) {
+          case 'encouragement':
+            return 'rgba(76, 175, 80, 0.95)'; // Green for positive patterns
+          case 'break':
+            return 'rgba(244, 67, 54, 0.95)'; // Red for break needed
+          case 'warning':
+            return 'rgba(255, 152, 0, 0.95)'; // Orange for warnings
+          default:
+            return 'rgba(33, 150, 243, 0.95)'; // Blue for neutral
+        }
+      };
+      
       aiOverlay.style.cssText = `
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background-color: ${recommendations.overlayType === 'encouragement' ? 'rgba(76, 175, 80, 0.95)' : 
-                          recommendations.overlayType === 'break' ? 'rgba(244, 67, 54, 0.95)' : 
-                          'rgba(255, 152, 0, 0.95)'};
+        background-color: ${getPatternColor(recommendations.overlayType)};
         color: white;
         padding: 30px;
         border-radius: 15px;
@@ -1504,9 +1670,30 @@ export default defineContentScript({
         z-index: 2147483646;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        backdrop-filter: blur(10px);
       `;
       
+      // Get pattern emoji for display
+      const getPatternEmoji = (pattern: string) => {
+        const emojiMap: Record<string, string> = {
+          'Deep Focus/Learning': '🎯',
+          'Active Socializing': '👥', 
+          'Intentional Leisure': '😊',
+          'Casual Browsing/Catch-up': '📱',
+          'Passive Consumption/Doomscrolling': '⚠️',
+          'Anxiety-Driven Information Seeking': '😰'
+        };
+        return emojiMap[pattern] || '📱';
+      };
+      
+      const patternDisplay = recommendations.userPattern 
+        ? `<div style="font-size: 14px; margin-bottom: 10px; opacity: 0.9;">
+             ${getPatternEmoji(recommendations.userPattern)} Pattern: ${recommendations.userPattern}
+           </div>`
+        : '';
+      
       aiOverlay.innerHTML = `
+        ${patternDisplay}
         <div style="font-size: 18px; margin-bottom: 15px; font-weight: bold;">
           ${recommendations.overlayMessage}
         </div>
@@ -1519,12 +1706,14 @@ export default defineContentScript({
           cursor: pointer;
           font-size: 14px;
           font-weight: bold;
-        ">Continue</button>
+          transition: all 0.2s ease;
+        " onmouseover="this.style.backgroundColor='rgba(255,255,255,0.3)'" 
+           onmouseout="this.style.backgroundColor='rgba(255,255,255,0.2)'">Continue</button>
       `;
       
       document.body.appendChild(aiOverlay);
       
-      // Auto-close after 5 seconds or on click
+      // Auto-close after 7 seconds (increased for pattern info) or on click
       const closeBtn = document.getElementById('ai-overlay-close');
       const closeOverlay = () => {
         if (aiOverlay) aiOverlay.remove();
@@ -1534,7 +1723,7 @@ export default defineContentScript({
         closeBtn.addEventListener('click', closeOverlay);
       }
       
-      setTimeout(closeOverlay, 5000);
+      setTimeout(closeOverlay, 7000);
     }
 
     // Check if we should reset based on time
@@ -1557,6 +1746,14 @@ export default defineContentScript({
         isAwaitingPostTriggerScrolls = false;
         postTriggerScrollCount = 0;
         isAnalysisInProgress = false;
+        
+        // Reset grace period state
+        if (isInGracePeriod) {
+          endGracePeriod(true);
+        }
+        isInGracePeriod = false;
+        gracePeriodScrollsUsed = 0;
+        
         // Clear scraper buffer
         if (contentScraper) {
           contentScraper.clearBuffer();
@@ -1636,13 +1833,32 @@ export default defineContentScript({
           
           // Check against the effective limit (custom or global)
           if (scrollCount >= effectiveMax) {
-            // Fallback mechanism: if we're at the limit but haven't done analysis yet, force it
-            if (!hasTriggeredAIAnalysis && (aiAnalyzer && contentScraper)) {
-              console.log('AI CONTENT: Fallback analysis triggered at scroll limit');
-              performAIAnalysis();
-              hasTriggeredAIAnalysis = true;
+            // If we're in grace period, check if we can use a grace scroll
+            if (isInGracePeriod) {
+              const canContinue = useGraceScroll();
+              if (!canContinue) {
+                // Grace period ended, block immediately
+                return;
+              }
+            } else {
+              // First time hitting limit - check if we should start grace period
+              const shouldStartGrace = isAnalysisInProgress || (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper);
+              
+              if (shouldStartGrace) {
+                // Start analysis if not already triggered
+                if (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper) {
+                  console.log('AI CONTENT: Analysis triggered at scroll limit');
+                  performAIAnalysis();
+                  hasTriggeredAIAnalysis = true;
+                }
+                
+                // Start grace period
+                startGracePeriod();
+              } else {
+                // No analysis available or already completed - block immediately
+                setScrollBlocking(true);
+              }
             }
-            setScrollBlocking(true);
           }
         } else {
           console.error('SCROLL: Failed to increment scroll count:', response);

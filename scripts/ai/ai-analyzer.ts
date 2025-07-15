@@ -2,15 +2,25 @@
  * Main AI content analyzer that orchestrates the analysis process
  */
 
+import { PatternTracker } from './pattern-tracker';
+
+// Updated interface to support new behavioral analysis
 export interface AIAnalysisResponse {
-  content_type: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
-  confidence_score: number;
-  educational_value: number;
+  // New primary fields from enhanced backend
+  user_pattern?: 'Deep Focus/Learning' | 'Active Socializing' | 'Intentional Leisure' | 
+                'Casual Browsing/Catch-up' | 'Passive Consumption/Doomscrolling' | 
+                'Anxiety-Driven Information Seeking';
   addiction_risk: number;
-  recommended_action: 'bonus_scrolls' | 'maintain_limit' | 'show_warning' | 'immediate_break';
+  educational_value: number;
+  recommended_action: 'session_extension' | 'gentle_reward' | 'maintain_limit' | 
+                     'show_warning' | 'immediate_break' | 'bonus_scrolls'; // Added new actions + legacy
   bonus_scrolls: number;
   reasoning: string;
   break_suggestion?: string;
+  
+  // Legacy fields (optional, for backward compatibility)
+  content_type?: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
+  confidence_score?: number;
 }
 
 export interface AIAnalysisRequest {
@@ -55,9 +65,11 @@ export class AIContentAnalyzer {
   private config: AnalyzerConfig;
   private cache = new Map<string, CacheEntry>();
   private isProcessing = false;
+  private patternTracker: PatternTracker;
 
   constructor(config: AnalyzerConfig) {
     this.config = config;
+    this.patternTracker = new PatternTracker();
   }
 
   /**
@@ -187,49 +199,92 @@ export class AIContentAnalyzer {
    */
   public applyRecommendations(
     analysis: AIAnalysisResponse,
-    currentMaxScrolls: number
+    currentMaxScrolls: number,
+    domain: string = '',
+    scrollCount: number = 0
   ): {
     newMaxScrolls: number;
     shouldShowOverlay: boolean;
     overlayMessage: string;
     overlayType: 'warning' | 'encouragement' | 'break';
+    userPattern?: string;
   } {
-    const { recommended_action, bonus_scrolls, reasoning, break_suggestion } = analysis;
+    const { recommended_action, bonus_scrolls, reasoning, break_suggestion, user_pattern } = analysis;
+
+    // Track the user pattern if available
+    if (user_pattern && domain) {
+      this.patternTracker.trackPattern(
+        user_pattern, 
+        domain, 
+        scrollCount, 
+        analysis.addiction_risk || 0, 
+        analysis.educational_value || 0
+      );
+    }
 
     switch (recommended_action) {
-      case 'bonus_scrolls':
+      case 'session_extension':
+        return {
+          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 15), // Default 15-20 scrolls for deep learning
+          shouldShowOverlay: true,
+          overlayMessage: `🎯 Deep Focus Detected! Keep learning! ${reasoning}`,
+          overlayType: 'encouragement',
+          userPattern: user_pattern
+        };
+
+      case 'gentle_reward':
+        return {
+          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 3), // Default 3-5 scrolls for quality content
+          shouldShowOverlay: true,
+          overlayMessage: `😊 Quality Time! Enjoying some quality content! ${reasoning}`,
+          overlayType: 'encouragement',
+          userPattern: user_pattern
+        };
+
+      case 'bonus_scrolls': // Legacy support
         return {
           newMaxScrolls: currentMaxScrolls + bonus_scrolls,
           shouldShowOverlay: true,
           overlayMessage: `🎉 Productive content detected! Added ${bonus_scrolls} bonus scrolls. ${reasoning}`,
-          overlayType: 'encouragement'
+          overlayType: 'encouragement',
+          userPattern: user_pattern
         };
 
       case 'show_warning':
         return {
           newMaxScrolls: currentMaxScrolls,
           shouldShowOverlay: true,
-          overlayMessage: `⚠️ Warning: ${reasoning}. Consider taking a break soon.`,
-          overlayType: 'warning'
+          overlayMessage: `⚠️ Check Your Focus: ${reasoning}. Consider taking a break soon.`,
+          overlayType: 'warning',
+          userPattern: user_pattern
         };
 
       case 'immediate_break':
         return {
           newMaxScrolls: currentMaxScrolls,
           shouldShowOverlay: true,
-          overlayMessage: `🛑 Time for a break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
-          overlayType: 'break'
+          overlayMessage: `🛑 Time for a Break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
+          overlayType: 'break',
+          userPattern: user_pattern
         };
 
       case 'maintain_limit':
       default:
         return {
           newMaxScrolls: currentMaxScrolls,
-          shouldShowOverlay: false,
-          overlayMessage: reasoning,
-          overlayType: 'warning'
+          shouldShowOverlay: true,
+          overlayMessage: `📱 Mindful Browsing: ${reasoning || 'Continue browsing mindfully'}`,
+          overlayType: 'warning',
+          userPattern: user_pattern
         };
     }
+  }
+
+  /**
+   * Get the pattern tracker instance
+   */
+  public getPatternTracker(): PatternTracker {
+    return this.patternTracker;
   }
 
   /**

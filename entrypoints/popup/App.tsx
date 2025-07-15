@@ -39,6 +39,16 @@ export default function App() {
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
   const [showPomodoroCompletePopup, setShowPomodoroCompletePopup] = useState<boolean>(false);
   const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
+  
+  // Behavior insights state
+  const [currentPattern, setCurrentPattern] = useState<string>('Casual Browsing/Catch-up');
+  const [recentPatterns, setRecentPatterns] = useState<string[]>([]);
+  const [sessionAnalytics, setSessionAnalytics] = useState<{
+    mostCommonPattern: string;
+    averageAddictionRisk: number;
+    averageEducationalValue: number;
+    sessionDuration: number;
+  } | null>(null);
 
   useEffect(() => {
     // Check for URL parameters to handle pomodoro completion popup
@@ -102,6 +112,9 @@ export default function App() {
         
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
+        
+        // Load pattern insights after settings are loaded
+        loadPatternInsights();
       })
       .catch(error => {
         console.error('Error loading settings:', error);
@@ -347,6 +360,93 @@ export default function App() {
     return customLimits[site] || maxScrolls;
   };
 
+  // Helper functions for pattern tracking
+  const getPatternEmoji = (pattern: string): string => {
+    const emojiMap: Record<string, string> = {
+      'Deep Focus/Learning': '🎯',
+      'Active Socializing': '👥', 
+      'Intentional Leisure': '😊',
+      'Casual Browsing/Catch-up': '📱',
+      'Passive Consumption/Doomscrolling': '⚠️',
+      'Anxiety-Driven Information Seeking': '😰'
+    };
+    return emojiMap[pattern] || '📱';
+  };
+
+  const getPatternClassName = (pattern: string): string => {
+    const classMap: Record<string, string> = {
+      'Deep Focus/Learning': 'pattern-positive',
+      'Active Socializing': 'pattern-social', 
+      'Intentional Leisure': 'pattern-leisure',
+      'Casual Browsing/Catch-up': 'pattern-neutral',
+      'Passive Consumption/Doomscrolling': 'pattern-warning',
+      'Anxiety-Driven Information Seeking': 'pattern-alert'
+    };
+    return classMap[pattern] || 'pattern-neutral';
+  };
+
+  // Load pattern insights from storage
+  const loadPatternInsights = async () => {
+    try {
+      const result = await browser.storage.local.get(['userPatterns', 'sessionStartTime']);
+      
+      if (result.userPatterns && Array.isArray(result.userPatterns) && result.userPatterns.length > 0) {
+        const patterns = result.userPatterns;
+        
+        // Get recent patterns
+        const recent = patterns.slice(-10).map((p: any) => p.pattern);
+        setRecentPatterns(recent);
+        
+        // Set current pattern (most recent)
+        if (recent.length > 0) {
+          setCurrentPattern(recent[recent.length - 1]);
+        }
+        
+        // Calculate session analytics
+        const sessionStart = result.sessionStartTime || Date.now();
+        const sessionPatterns = patterns.filter((p: any) => p.timestamp >= sessionStart);
+        
+        const analytics = {
+          mostCommonPattern: getMostCommonPattern(patterns),
+          averageAddictionRisk: sessionPatterns.length > 0 
+            ? sessionPatterns.reduce((sum: number, p: any) => sum + (p.addictionRisk || 0), 0) / sessionPatterns.length 
+            : 0,
+          averageEducationalValue: sessionPatterns.length > 0 
+            ? sessionPatterns.reduce((sum: number, p: any) => sum + (p.educationalValue || 0), 0) / sessionPatterns.length 
+            : 0,
+          sessionDuration: Math.round((Date.now() - sessionStart) / 60000) // minutes
+        };
+        
+        setSessionAnalytics(analytics);
+      }
+    } catch (error) {
+      console.error('Error loading pattern insights:', error);
+    }
+  };
+
+  const getMostCommonPattern = (patterns: any[]): string => {
+    if (patterns.length === 0) return 'Casual Browsing/Catch-up';
+    
+    const recentPatterns = patterns.slice(-20);
+    const patternCounts: Record<string, number> = {};
+    
+    recentPatterns.forEach((entry: any) => {
+      patternCounts[entry.pattern] = (patternCounts[entry.pattern] || 0) + 1;
+    });
+
+    let mostCommon = 'Casual Browsing/Catch-up';
+    let maxCount = 0;
+    
+    Object.entries(patternCounts).forEach(([pattern, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = pattern;
+      }
+    });
+
+    return mostCommon;
+  };
+
   const isEditingYoutube = editingSite?.includes('youtube.com') || false;
   const isEditingXCom = editingSite?.includes('x.com') || false;
 
@@ -391,6 +491,8 @@ export default function App() {
         </div>
       </div>
 
+      {/* Behavior Insights Section */}
+      
       <div className="settings-inline-group">
         <div className="settings-group">
           <label htmlFor="max-scrolls">Global scroll limit:</label>
