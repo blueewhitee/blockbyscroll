@@ -544,9 +544,18 @@ export default function App() {
       )}
       
       <div className="settings-group">
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
           <label>Blocked Sites:</label>
         </div>
+        <p style={{ 
+          margin: '0 0 10px 0', 
+          fontSize: '12px', 
+          color: 'var(--secondary-text)', 
+          fontStyle: 'italic',
+          opacity: '0.8'
+        }}>
+          Click a site to configure custom features and limits.
+        </p>
         <div className="sites-container" style={{ position: 'relative' }}>
           {distractingSites.map((site) => (
             <div 
@@ -1097,53 +1106,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                  <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500'}}>Auto-play on Reveal</label>
-                  <div 
-                    onClick={() => handleVideoOverlaySettingToggle('autoPlayOnReveal')}
-                    style={{
-                      position: 'relative',
-                      display: 'inline-block',
-                      width: '40px',
-                      height: '20px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={videoOverlaySettings.autoPlayOnReveal}
-                      onChange={() => {}}
-                      style={{ opacity: 0, width: 0, height: 0 }}
-                    />
-                    <span 
-                      style={{
-                        position: 'absolute',
-                        cursor: 'pointer',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: videoOverlaySettings.autoPlayOnReveal ? 'var(--primary-color)' : '#ccc',
-                        borderRadius: '34px',
-                        transition: '.4s'
-                      }}
-                    >
-                      <span
-                        style={{
-                          position: 'absolute',
-                          content: '""',
-                          height: '16px',
-                          width: '16px',
-                          left: videoOverlaySettings.autoPlayOnReveal ? '22px' : '2px',
-                          bottom: '2px',
-                          backgroundColor: '#ffffff',
-                          borderRadius: '50%',
-                          transition: '.4s'
-                        }}
-                      />
-                    </span>
-                  </div>
-                </div>
+
 
                 <div style={{marginBottom: '12px'}}>
                   <label style={{fontSize: '14px', color: 'var(--text-color)', fontWeight: '500', display: 'block', marginBottom: '6px'}}>

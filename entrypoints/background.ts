@@ -1,5 +1,7 @@
 export default defineBackground(() => {
-  console.log('ScrollStop background initialized', { id: browser.runtime.id });
+  console.log('🚀 ScrollStop background script initialized', { id: browser.runtime.id });
+  console.log('📋 Background script timestamp:', new Date().toISOString());
+  console.log('🔧 Background script ready to handle messages');
 
   // Track active scroll count operations to prevent race conditions
   const pendingOperations = new Map<string, boolean>(); // Added type
@@ -276,6 +278,107 @@ export default defineBackground(() => {
 
   // Handle messages from popup
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('📨 BACKGROUND: Received message:', { type: message.type, sender: sender.tab?.url });
+    
+    // Test message handler to verify message passing works
+    if (message.type === 'TEST_BACKGROUND') {
+      console.log('✅ BACKGROUND: Test message received successfully');
+      sendResponse({ success: true, message: 'Background script is working!' });
+      return true;
+    }
+    
+    if (message.type === 'TEST_BACKEND_CONNECTION') {
+      (async () => {
+        try {
+          const response = await fetch('https://nomoscroll-backend-815059150602.asia-south1.run.app/api/test');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.connected) {
+              sendResponse({ success: true, connected: true });
+              return;
+            }
+          }
+          sendResponse({ success: false, connected: false });
+        } catch (error: any) {
+          console.error('BACKGROUND: Backend connection test failed:', error);
+          sendResponse({ success: false, connected: false, error: error.message });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
+    
+    // Handle AI content analysis requests
+    if (message.type === 'AI_ANALYZE_CONTENT') {
+      (async () => {
+        try {
+          // Validate payload
+          if (!message.content || typeof message.content !== 'string' || !message.context) {
+            throw new Error('Invalid payload format');
+          }
+
+          // Timeout setup (15 seconds to prevent hanging)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.error('⏰ BACKGROUND: Fetch timeout after 15s');
+          }, 15000);
+
+          console.log('📤 BACKGROUND: Sending to backend:', {
+            contentPreview: message.content.substring(0, 100) + '...',
+            context: message.context
+          });
+
+          const response = await fetch('https://nomoscroll-backend-815059150602.asia-south1.run.app/api/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content: message.content,
+              context: message.context,
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ BACKGROUND: Backend error:', errorText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log('✅ BACKGROUND: Backend response:', data);
+
+          // Relaxed validation: Check for success and data, ignore extra fields like timestamp/requestId
+          if (data.success && data.data) {
+            console.log('✅ BACKGROUND: Valid response format');
+            sendResponse({ success: true, analysis: data.data });
+          } else {
+            console.error('❌ BACKGROUND: Invalid response format:', data);
+            throw new Error('Invalid response format from backend');
+          }
+        } catch (error: any) { // Fixed linter error by typing as any
+          console.error('❌ BACKGROUND: API call failed:', error?.message || 'Unknown error', error?.stack);
+          sendResponse({
+            success: false,
+            error: error?.message || 'Unknown error',
+            analysis: {
+              content_type: 'unknown',
+              confidence_score: 0,
+              educational_value: 5,
+              addiction_risk: 5,
+              recommended_action: 'maintain_limit',
+              bonus_scrolls: 0,
+              reasoning: 'API unavailable, maintaining original scroll limit'
+            }
+          });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
+
     if (message.type === 'GET_SETTINGS') {
       browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings']).then(sendResponse);
       return true; // Required for async response

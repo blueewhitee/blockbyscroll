@@ -10,8 +10,14 @@ export default defineConfig({
     name: 'NoMoScroll',
     description: 'Control scrolling on distracting websites to prevent doomscrolling',
     version: '3.0.0',
-    permissions: ['storage', 'tabs'],
-    host_permissions: ['<all_urls>'], // Allow extension to run on any website
+    permissions: ['storage', 'tabs', 'activeTab'],
+    host_permissions: [
+      '<all_urls>', // Allow extension to run on any website
+      'https://nomoscroll-backend-nomoscroll.asia-south1.run.app/*' // Explicit backend permission
+    ],
+    background: {
+      service_worker: 'entrypoints/background.ts', // Ensure background script is defined
+    },
     action: {
       default_popup: 'popup/index.html',
       default_title: 'NoMoScroll Settings'

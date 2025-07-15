@@ -1,26 +1,5 @@
-// AI analysis types and classes defined inline for now
-interface ScrapingConfig {
-  distractingSites: string[];
-  enabled: boolean;
-  minScrollsForAnalysis: number;
-}
-
-interface ScrapingResult {
-  success: boolean;
-  data?: string;
-  error?: string;
-}
-
-interface AIAnalysisResponse {
-  content_type: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
-  confidence_score: number;
-  educational_value: number;
-  addiction_risk: number;
-  recommended_action: 'bonus_scrolls' | 'maintain_limit' | 'show_warning' | 'immediate_break';
-  bonus_scrolls: number;
-  reasoning: string;
-  break_suggestion?: string;
-}
+import { GeneralScraper, ScrapingConfig, ScrapingResult } from '../scripts/scraping/general-scraper';
+import { AIContentAnalyzer, AnalysisResult, DEFAULT_ANALYZER_CONFIG } from '../scripts/ai/ai-analyzer';
 
 // Video overlay configuration interface
 interface VideoOverlayConfig {
@@ -434,268 +413,6 @@ class VideoOverlayManager {
   }
 }
 
-// Simplified scraper class
-class GeneralScraper {
-  private config: ScrapingConfig;
-  private contentBuffer: string[] = [];
-  
-  constructor(config: ScrapingConfig) {
-    this.config = config;
-  }
-  
-  initialize(): boolean {
-    const currentDomain = window.location.hostname.replace(/^www\./, '');
-    return this.config.distractingSites.some(site => 
-      currentDomain.includes(site) || site.includes(currentDomain)
-    );
-  }
-  
-  captureCurrentContent(): void {
-    try {
-      // Get all visible text content
-      const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode: (node) => {
-            const parent = node.parentElement;
-            if (!parent) return NodeFilter.FILTER_REJECT;
-            
-            // Skip script, style, and hidden elements
-            if (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.tagName === 'NOSCRIPT') {
-              return NodeFilter.FILTER_REJECT;
-            }
-            
-            // Check if element is visible
-            const style = window.getComputedStyle(parent);
-            if (style.display === 'none' || style.visibility === 'hidden') {
-              return NodeFilter.FILTER_REJECT;
-            }
-            
-            // Check if in viewport
-            const rect = parent.getBoundingClientRect();
-            if (rect.bottom < 0 || rect.top > window.innerHeight) {
-              return NodeFilter.FILTER_REJECT;
-            }
-            
-            return NodeFilter.FILTER_ACCEPT;
-          }
-        }
-      );
-      
-      const visibleText: string[] = [];
-      let node;
-      while (node = walker.nextNode()) {
-        const text = node.textContent?.trim();
-        if (text && text.length > 10) {
-          visibleText.push(text);
-        }
-      }
-      
-      // Add to buffer (keep last 3 captures)
-      this.contentBuffer.push(visibleText.join(' '));
-      if (this.contentBuffer.length > 3) {
-        this.contentBuffer.shift();
-      }
-      
-      console.log('SCRAPER: Captured content, buffer size:', this.contentBuffer.length);
-    } catch (error) {
-      console.error('SCRAPER: Error capturing content:', error);
-    }
-  }
-  
-  getContentForAnalysis(): ScrapingResult {
-    if (this.contentBuffer.length < 2) {
-      return {
-        success: false,
-        error: 'Not enough content captured'
-      };
-    }
-    
-    const combinedContent = this.contentBuffer.join('\n\n');
-    const contentData = {
-      domain: window.location.hostname,
-      url: window.location.href,
-      timestamp: new Date().toISOString(),
-      content: combinedContent.substring(0, 3000) // Limit content length
-    };
-    
-    return {
-      success: true,
-      data: JSON.stringify(contentData)
-    };
-  }
-  
-  clearBuffer(): void {
-    this.contentBuffer = [];
-  }
-}
-
-// Simplified AI analyzer class
-class AIContentAnalyzer {
-  private apiKey = 'AIzaSyCYsgshv7TI7I2y5o6O6jvsaiB6PRRa30E';
-  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
-  
-  async analyzeContent(contentData: string, context: any): Promise<any> {
-    try {
-      const parsedData = JSON.parse(contentData);
-      const prompt = this.buildPrompt(parsedData, context);
-      
-      const response = await this.callGeminiAPI(prompt);
-      return {
-        success: true,
-        analysis: response
-      };
-    } catch (error) {
-      console.error('AI ANALYZER: Error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Analysis failed'
-      };
-    }
-  }
-  
-  private buildPrompt(data: any, context: any): string {
-    const scrollsRemaining = context.maxScrolls - context.scrollCount;
-    const scrollTime = Math.round((Date.now() - context.scrollStartTime) / 60000);
-    
-    return `You are an expert digital wellness analyst. Analyze the following web content that a user has been scrolling through and predict their likely behavior patterns.
-
-**Context:**
-- User has been scrolling for ${scrollTime} minutes
-- Current scroll count: ${context.scrollCount} out of ${context.maxScrolls} maximum
-- Scrolls remaining: ${scrollsRemaining}
-- Platform: ${data.domain}
-
-**Content to Analyze:**
-${data.content}
-
-**Required Response Format (JSON only, no other text):**
-{
-  "content_type": "productive|neutral|entertainment|doomscroll",
-  "confidence_score": 0.0-1.0,
-  "educational_value": 0-10,
-  "addiction_risk": 0-10,
-  "recommended_action": "bonus_scrolls|maintain_limit|show_warning|immediate_break",
-  "bonus_scrolls": 0-15,
-  "reasoning": "Brief explanation of your assessment",
-  "break_suggestion": "Specific alternative activity if break recommended"
-}
-
-**Decision Guidelines:**
-- **Productive** (bonus_scrolls: 8-15): Educational content, tutorials, research, professional development
-- **Neutral** (bonus_scrolls: 3-5): News, general interest, mixed value content  
-- **Entertainment** (bonus_scrolls: 0-2): Social media, memes, celebrity content
-- **Doomscroll** (immediate_break): Highly repetitive, rage-inducing, or mindless content
-
-Respond with ONLY the JSON object:`;
-  }
-  
-  private async callGeminiAPI(prompt: string): Promise<AIAnalysisResponse> {
-    const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1000,
-            responseMimeType: "application/json"
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const responseText = data.candidates[0].content.parts[0].text;
-      return JSON.parse(responseText);
-      
-    } catch (error) {
-      console.error('GEMINI API Error:', error);
-      // Return fallback response
-      return {
-        content_type: 'unknown',
-        confidence_score: 0,
-        educational_value: 5,
-        addiction_risk: 5,
-        recommended_action: 'maintain_limit',
-        bonus_scrolls: 0,
-        reasoning: 'AI analysis unavailable',
-        break_suggestion: 'Take a 5-minute break'
-      };
-    }
-  }
-  
-  applyRecommendations(analysis: AIAnalysisResponse, currentMaxScrolls: number): any {
-    const { recommended_action, bonus_scrolls, reasoning, break_suggestion } = analysis;
-
-    switch (recommended_action) {
-      case 'bonus_scrolls':
-        return {
-          newMaxScrolls: currentMaxScrolls + bonus_scrolls,
-          shouldShowOverlay: true,
-          overlayMessage: `🎉 Productive content detected! Added ${bonus_scrolls} bonus scrolls. ${reasoning}`,
-          overlayType: 'encouragement'
-        };
-
-      case 'show_warning':
-        return {
-          newMaxScrolls: currentMaxScrolls,
-          shouldShowOverlay: true,
-          overlayMessage: `⚠️ Warning: ${reasoning}. Consider taking a break soon.`,
-          overlayType: 'warning'
-        };
-
-      case 'immediate_break':
-        return {
-          newMaxScrolls: currentMaxScrolls,
-          shouldShowOverlay: true,
-          overlayMessage: `🛑 Time for a break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
-          overlayType: 'break'
-        };
-
-      default:
-        return {
-          newMaxScrolls: currentMaxScrolls,
-          shouldShowOverlay: false,
-          overlayMessage: reasoning,
-          overlayType: 'warning'
-        };
-    }
-  }
-  
-  async testConnection(): Promise<boolean> {
-    try {
-      const testPrompt = 'Test connection. Respond with: {"status": "ok"}';
-      await this.callGeminiAPI(testPrompt);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
-// Factory functions
-function createScraper(config: ScrapingConfig): GeneralScraper {
-  return new GeneralScraper(config);
-}
-
-function createAIAnalyzer(): AIContentAnalyzer {
-  return new AIContentAnalyzer();
-}
-
 declare global {
   interface Window {
     _scrollStopObserver: MutationObserver | null;
@@ -736,6 +453,9 @@ export default defineContentScript({
     let scrollStartTime = Date.now();
     let aiAnalysisEnabled = true; // Default enabled
     let hasTriggeredAIAnalysis = false; // Prevent multiple analyses per session
+    let isAwaitingPostTriggerScrolls = false; // Flag for new analysis logic
+    let postTriggerScrollCount = 0; // Counter for new analysis logic
+    let isAnalysisInProgress = false; // Prevent race conditions
     
     // Video Overlay variables
     let videoOverlayManager: VideoOverlayManager | null = null;
@@ -1162,8 +882,11 @@ export default defineContentScript({
         lastResetTime = message.lastResetTime;
         updateCounter();
         setScrollBlocking(false);
-        // Reset AI analysis flag
+        // Reset AI analysis flag and new state variables
         hasTriggeredAIAnalysis = false;
+        isAwaitingPostTriggerScrolls = false;
+        postTriggerScrollCount = 0;
+        isAnalysisInProgress = false;
         // Clear scraper buffer
         if (contentScraper) {
           contentScraper.clearBuffer();
@@ -1522,6 +1245,12 @@ export default defineContentScript({
       // Check if we should block based on current count
       const effectiveMax = getEffectiveScrollLimit();
       if (scrollCount >= effectiveMax) {
+        // Fallback mechanism: if we're at the limit but haven't done analysis yet, force it
+        if (!hasTriggeredAIAnalysis && (aiAnalyzer && contentScraper)) {
+          console.log('AI CONTENT: Fallback analysis triggered at scroll limit');
+          performAIAnalysis();
+          hasTriggeredAIAnalysis = true;
+        }
         setScrollBlocking(true);
       }
       
@@ -1593,6 +1322,8 @@ export default defineContentScript({
       }
 
       try {
+        console.log('AI CONTENT: Initializing analysis system...');
+        
         // Initialize content scraper
         const scrapingConfig: ScrapingConfig = {
           distractingSites: distractingSites,
@@ -1600,24 +1331,28 @@ export default defineContentScript({
           minScrollsForAnalysis: 2
         };
         
-        contentScraper = createScraper(scrapingConfig);
+        contentScraper = new GeneralScraper(scrapingConfig);
         
         // Initialize AI analyzer
-        aiAnalyzer = createAIAnalyzer();
+        aiAnalyzer = new AIContentAnalyzer(DEFAULT_ANALYZER_CONFIG);
         
         // Test AI connection
+        console.log('AI CONTENT: Testing backend connection...');
         const connectionTest = await aiAnalyzer.testConnection();
         if (!connectionTest) {
           console.warn('AI CONTENT: Connection test failed, but continuing with fallback');
+        } else {
+          console.log('AI CONTENT: Backend connection test successful');
         }
         
         // Initialize the scraper
         const scraperInitialized = contentScraper.initialize();
         if (scraperInitialized) {
-          console.log('AI CONTENT: Analysis system initialized successfully');
+          console.log('AI CONTENT: Analysis system initialized successfully for domain:', getMatchingDomain());
           
           // Start capturing content immediately
           contentScraper.captureCurrentContent();
+          console.log('AI CONTENT: Initial content capture completed');
         } else {
           console.log('AI CONTENT: Scraper not initialized (site not monitored or disabled)');
           contentScraper = null;
@@ -1633,12 +1368,13 @@ export default defineContentScript({
 
     // Perform AI content analysis and apply recommendations
     async function performAIAnalysis() {
-      if (!contentScraper || !aiAnalyzer || hasTriggeredAIAnalysis) {
+      if (!contentScraper || !aiAnalyzer || hasTriggeredAIAnalysis || isAnalysisInProgress) {
         return;
       }
 
       try {
         console.log('AI CONTENT: Starting content analysis...');
+        isAnalysisInProgress = true; // Set lock
         hasTriggeredAIAnalysis = true;
         
         // Show analysis indicator
@@ -1652,6 +1388,15 @@ export default defineContentScript({
           showAIAnalysisIndicator(false);
           return;
         }
+
+        // Additional validation: ensure minimum content length
+        if (scrapingResult.data.length < 100) {
+          console.log('AI CONTENT: Content too short for meaningful analysis:', scrapingResult.data.length, 'characters');
+          showAIAnalysisIndicator(false);
+          return;
+        }
+
+        console.log('AI CONTENT: Content validated for analysis:', scrapingResult.data.length, 'characters');
 
         // Analyze content with AI
         const analysisResult = await aiAnalyzer.analyzeContent(
@@ -1700,6 +1445,8 @@ export default defineContentScript({
       } catch (error) {
         console.error('AI CONTENT: Error during AI analysis:', error);
         showAIAnalysisIndicator(false);
+      } finally {
+        isAnalysisInProgress = false; // Always clear lock
       }
     }
 
@@ -1805,8 +1552,11 @@ export default defineContentScript({
         setScrollBlocking(false);
         // Update the last reset time
         lastResetTime = now;
-        // Reset AI analysis flag
+        // Reset AI analysis flag and new state variables
         hasTriggeredAIAnalysis = false;
+        isAwaitingPostTriggerScrolls = false;
+        postTriggerScrollCount = 0;
+        isAnalysisInProgress = false;
         // Clear scraper buffer
         if (contentScraper) {
           contentScraper.clearBuffer();
@@ -1832,9 +1582,18 @@ export default defineContentScript({
     function incrementScrollCount() {
       const domain = getMatchingDomain();
       
+      console.log(`SCROLL: Incrementing count for domain: ${domain}, current: ${scrollCount}`);
+      
       // Capture content for AI analysis before incrementing
       if (contentScraper) {
-        contentScraper.captureCurrentContent();
+        try {
+          contentScraper.captureCurrentContent();
+          console.log('SCROLL: Content captured successfully');
+        } catch (error) {
+          console.error('SCROLL: Error capturing content:', error);
+        }
+      } else {
+        console.warn('SCROLL: Content scraper not available');
       }
       
       // Use the background script to handle the storage update
@@ -1846,22 +1605,50 @@ export default defineContentScript({
           scrollCount = response.newCount;
           updateCounter();
           
-          // Check if we should trigger AI analysis (when 3 scrolls remaining)
           const effectiveMax = getEffectiveScrollLimit();
           const scrollsRemaining = effectiveMax - scrollCount;
           
-          if (aiAnalyzer && contentScraper && scrollsRemaining <= 3 && !hasTriggeredAIAnalysis) {
-            console.log(`AI CONTENT: Triggering analysis with ${scrollsRemaining} scrolls remaining`);
+          console.log(`SCROLL: Updated count - current: ${scrollCount}, remaining: ${scrollsRemaining}, effective max: ${effectiveMax}`);
+          console.log(`SCROLL: Analysis state - triggered: ${hasTriggeredAIAnalysis}, awaiting: ${isAwaitingPostTriggerScrolls}, post-count: ${postTriggerScrollCount}, in-progress: ${isAnalysisInProgress}`);
+          
+          // New analysis logic: check if we are awaiting post-trigger scrolls
+          if (isAwaitingPostTriggerScrolls) {
+            postTriggerScrollCount++;
+            console.log(`AI CONTENT: Post-trigger scroll ${postTriggerScrollCount}/3 captured.`);
+            
+            if (postTriggerScrollCount >= 3) {
+              console.log(`AI CONTENT: Captured 3 post-trigger scrolls. Performing analysis.`);
+              performAIAnalysis();
+              isAwaitingPostTriggerScrolls = false; // Reset state
+              hasTriggeredAIAnalysis = true; // Prevent re-triggering
+            }
+          } else if (aiAnalyzer && contentScraper && scrollsRemaining <= 10 && !hasTriggeredAIAnalysis) {
+            // New trigger point: 10 scrolls remaining
+            console.log(`AI CONTENT: Triggering analysis wait state with ${scrollsRemaining} scrolls remaining.`);
+            isAwaitingPostTriggerScrolls = true;
+            postTriggerScrollCount = 0;
+          } else if (scrollsRemaining <= 5 && !hasTriggeredAIAnalysis && !isAwaitingPostTriggerScrolls && aiAnalyzer && contentScraper) {
+            // Secondary trigger: if user somehow missed the 10-scroll trigger, catch them at 5 scrolls
+            console.log(`AI CONTENT: Secondary trigger at ${scrollsRemaining} scrolls remaining - performing immediate analysis.`);
             performAIAnalysis();
+            hasTriggeredAIAnalysis = true;
           }
           
           // Check against the effective limit (custom or global)
           if (scrollCount >= effectiveMax) {
+            // Fallback mechanism: if we're at the limit but haven't done analysis yet, force it
+            if (!hasTriggeredAIAnalysis && (aiAnalyzer && contentScraper)) {
+              console.log('AI CONTENT: Fallback analysis triggered at scroll limit');
+              performAIAnalysis();
+              hasTriggeredAIAnalysis = true;
+            }
             setScrollBlocking(true);
           }
+        } else {
+          console.error('SCROLL: Failed to increment scroll count:', response);
         }
       }).catch(err => {
-        console.error('Error incrementing scroll count:', err);
+        console.error('SCROLL: Error incrementing scroll count:', err);
       });
     }
     
@@ -2296,16 +2083,66 @@ export default defineContentScript({
     
     // Make sure to clean up when unloading
     window.addEventListener('beforeunload', () => {
+      console.log('CLEANUP: Page unloading, cleaning up resources');
+      
       stopTimerUpdates();
       stopLocalPomodoroUpdate();
+      
+      // Clean up AI analysis state
+      if (isAnalysisInProgress) {
+        console.log('CLEANUP: Analysis was in progress, clearing lock');
+        isAnalysisInProgress = false;
+      }
+      
+      // Clean up scraper resources
+      if (contentScraper) {
+        try {
+          contentScraper.destroy();
+          console.log('CLEANUP: Content scraper destroyed');
+        } catch (error) {
+          console.error('CLEANUP: Error destroying content scraper:', error);
+        }
+      }
       
       // Clean up YouTube observer
       if (window._youtubeSettingsObserver) {
         window._youtubeSettingsObserver.disconnect();
         window._youtubeSettingsObserver = null;
       }
+      
+      // Clean up video overlay manager
+      if (videoOverlayManager) {
+        try {
+          videoOverlayManager.destroy();
+          console.log('CLEANUP: Video overlay manager destroyed');
+        } catch (error) {
+          console.error('CLEANUP: Error destroying video overlay manager:', error);
+        }
+      }
     });
     
+    // Handle tab visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        console.log('TAB: Tab became hidden');
+        // Don't reset analysis state, but stop active processes
+        if (isAnalysisInProgress) {
+          console.log('TAB: Analysis in progress while tab hidden, will continue');
+        }
+      } else {
+        console.log('TAB: Tab became visible');
+        // Optionally restart content capture if scraper exists
+        if (contentScraper && !isBlocked) {
+          try {
+            contentScraper.captureCurrentContent();
+            console.log('TAB: Resumed content capture on tab focus');
+          } catch (error) {
+            console.error('TAB: Error resuming content capture:', error);
+          }
+        }
+      }
+    });
+
     // Set up fullscreen change detection
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);

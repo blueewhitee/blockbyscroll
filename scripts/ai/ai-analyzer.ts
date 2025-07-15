@@ -2,12 +2,31 @@
  * Main AI content analyzer that orchestrates the analysis process
  */
 
-import { GeminiProvider, AIAnalysisResponse, AIAnalysisRequest, GeminiConfig } from './providers/gemini-provider';
+export interface AIAnalysisResponse {
+  content_type: 'productive' | 'neutral' | 'entertainment' | 'doomscroll' | 'unknown';
+  confidence_score: number;
+  educational_value: number;
+  addiction_risk: number;
+  recommended_action: 'bonus_scrolls' | 'maintain_limit' | 'show_warning' | 'immediate_break';
+  bonus_scrolls: number;
+  reasoning: string;
+  break_suggestion?: string;
+}
+
+export interface AIAnalysisRequest {
+  content: string;
+  context: {
+    scrollCount: number;
+    maxScrolls: number;
+    domain: string;
+    timestamp: number;
+    timeOfDay: string;
+    scrollTime: number; // minutes spent scrolling
+  };
+}
 
 export interface AnalyzerConfig {
   enabled: boolean;
-  provider: 'gemini';
-  geminiConfig: GeminiConfig;
   analysisThreshold: number; // Scrolls remaining to trigger analysis
   cacheEnabled: boolean;
   cacheDurationMs: number;
@@ -34,13 +53,11 @@ interface CacheEntry {
 
 export class AIContentAnalyzer {
   private config: AnalyzerConfig;
-  private provider: GeminiProvider;
   private cache = new Map<string, CacheEntry>();
   private isProcessing = false;
 
   constructor(config: AnalyzerConfig) {
     this.config = config;
-    this.provider = new GeminiProvider(config.geminiConfig);
   }
 
   /**
@@ -90,8 +107,49 @@ export class AIContentAnalyzer {
         }
       };
 
-      // Perform analysis
-      const analysis = await this.provider.analyzeContent(request);
+      // Perform analysis by sending message to background script with retry
+      let response;
+      let lastError;
+      const maxRetries = 2;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`AI ANALYZER: Analysis attempt ${attempt + 1}/${maxRetries + 1}`);
+          
+          response = await Promise.race([
+            browser.runtime.sendMessage({
+              type: 'AI_ANALYZE_CONTENT',
+              content: request.content,
+              context: request.context
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Analysis request timed out after 30 seconds')), 30000)
+            )
+          ]);
+          
+          if (response && response.success) {
+            break; // Success, exit retry loop
+          }
+          
+          lastError = new Error(response?.error || 'Analysis failed in background script');
+          if (attempt < maxRetries) {
+            console.log(`AI ANALYZER: Attempt ${attempt + 1} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
+          }
+        } catch (error) {
+          lastError = error;
+          if (attempt < maxRetries) {
+            console.log(`AI ANALYZER: Attempt ${attempt + 1} failed with error, retrying...`, error);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
+          }
+        }
+      }
+
+      if (!response || !response.success) {
+        throw lastError || new Error('All retry attempts failed');
+      }
+      
+      const analysis = response.analysis;
 
       // Cache the result
       if (this.config.cacheEnabled) {
@@ -247,7 +305,7 @@ export class AIContentAnalyzer {
         timestamp: Date.now(),
         processingTimeMs: Date.now() - startTime,
         contentLength,
-        provider: this.config.provider
+        provider: 'gemini' // This will need to be updated if a new provider is added
       }
     };
   }
@@ -267,7 +325,7 @@ export class AIContentAnalyzer {
         timestamp: Date.now(),
         processingTimeMs: Date.now() - startTime,
         contentLength,
-        provider: this.config.provider
+        provider: 'gemini' // This will need to be updated if a new provider is added
       }
     };
   }
@@ -277,10 +335,6 @@ export class AIContentAnalyzer {
    */
   public updateConfig(newConfig: Partial<AnalyzerConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    
-    if (newConfig.geminiConfig) {
-      this.provider.updateConfig(newConfig.geminiConfig);
-    }
   }
 
   /**
@@ -288,7 +342,9 @@ export class AIContentAnalyzer {
    */
   public async testConnection(): Promise<boolean> {
     try {
-      return await this.provider.testConnection();
+      // Ask background script to test the connection
+      const response = await browser.runtime.sendMessage({ type: 'TEST_BACKEND_CONNECTION' });
+      return response.success && response.connected;
     } catch (error) {
       console.error('AI ANALYZER: Connection test failed:', error);
       return false;
@@ -315,7 +371,7 @@ export class AIContentAnalyzer {
   } {
     return {
       enabled: this.config.enabled,
-      provider: this.config.provider,
+      provider: 'gemini', // This will need to be updated if a new provider is added
       isProcessing: this.isProcessing,
       cacheSize: this.cache.size,
       config: this.config
@@ -331,13 +387,6 @@ export function createAIAnalyzer(config: AnalyzerConfig): AIContentAnalyzer {
 // Default configuration
 export const DEFAULT_ANALYZER_CONFIG: AnalyzerConfig = {
   enabled: true,
-  provider: 'gemini',
-  geminiConfig: {
-    apiKey: 'AIzaSyCYsgshv7TI7I2y5o6O6jvsaiB6PRRa30E',
-    model: 'gemini-1.5-flash',
-    temperature: 0.3,
-    maxTokens: 1000
-  },
   analysisThreshold: 3, // Trigger when 3 scrolls remaining
   cacheEnabled: true,
   cacheDurationMs: 10 * 60 * 1000 // 10 minutes
