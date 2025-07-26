@@ -328,23 +328,65 @@ export default function App() {
       .split('/')[0];
 
     if (formattedSite && !distractingSites.includes(formattedSite)) {
-      setDistractingSites([...distractingSites, formattedSite]);
+      const updatedDistractingSites = [...distractingSites, formattedSite];
+      setDistractingSites(updatedDistractingSites);
       setScrollCounts(prev => ({ ...prev, [formattedSite]: 0 }));
       setNewSite('');
+      
+      // Automatically save the settings after adding the site
+      setSaveStatus('Saving...');
+      browser.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        maxScrolls,
+        distractingSites: updatedDistractingSites,
+        resetInterval,
+        customLimits,
+        youtubeSettings,
+        instagramSettings,
+        videoOverlaySettings
+      })
+      .then(() => {
+        setSaveStatus('Saved!');
+        setTimeout(() => setSaveStatus(''), 2000);
+      })
+      .catch(error => {
+        console.error('Error saving settings:', error);
+        setSaveStatus('Error saving');
+      });
     }
   };
 
   const handleRemoveSite = (siteToRemove: string) => {
-    setDistractingSites(distractingSites.filter(site => site !== siteToRemove));
+    const updatedDistractingSites = distractingSites.filter(site => site !== siteToRemove);
+    setDistractingSites(updatedDistractingSites);
     setScrollCounts(prev => {
       const updated = { ...prev };
       delete updated[siteToRemove];
       return updated;
     });
-    setCustomLimits(prev => {
-      const updated = { ...prev };
-      delete updated[siteToRemove];
-      return updated;
+    const updatedCustomLimits = { ...customLimits };
+    delete updatedCustomLimits[siteToRemove];
+    setCustomLimits(updatedCustomLimits);
+    
+    // Automatically save the settings after removing the site
+    setSaveStatus('Saving...');
+    browser.runtime.sendMessage({
+      type: 'SAVE_SETTINGS',
+      maxScrolls,
+      distractingSites: updatedDistractingSites,
+      resetInterval,
+      customLimits: updatedCustomLimits,
+      youtubeSettings,
+      instagramSettings,
+      videoOverlaySettings
+    })
+    .then(() => {
+      setSaveStatus('Saved!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    })
+    .catch(error => {
+      console.error('Error saving settings:', error);
+      setSaveStatus('Error saving');
     });
   };
 
