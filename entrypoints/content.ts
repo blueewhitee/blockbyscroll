@@ -453,9 +453,12 @@ export default defineContentScript({
     let scrollStartTime = Date.now();
     let aiAnalysisEnabled = true; // Default enabled
     let hasTriggeredAIAnalysis = false; // Prevent multiple analyses per session
-    let isAwaitingPostTriggerScrolls = false; // Flag for new analysis logic
-    let postTriggerScrollCount = 0; // Counter for new analysis logic
     let isAnalysisInProgress = false; // Prevent race conditions
+    // --- START: New state variables for final scroll scraping ---
+    let isScrapingFinalScrolls = false;
+    let finalScrollsScrapedCount = 0;
+    const FINAL_SCROLLS_TO_SCRAPE = 3;
+    // --- END: New state variables ---
     
     // Grace period variables for pending analysis
     let isInGracePeriod = false; // Whether we're in grace period waiting for analysis
@@ -939,11 +942,13 @@ export default defineContentScript({
         lastResetTime = message.lastResetTime;
         updateCounter();
         setScrollBlocking(false);
-        // Reset AI analysis flag and new state variables
+        // Reset AI analysis flag
         hasTriggeredAIAnalysis = false;
-        isAwaitingPostTriggerScrolls = false;
-        postTriggerScrollCount = 0;
         isAnalysisInProgress = false;
+        // --- START: Reset new state variables ---
+        isScrapingFinalScrolls = false;
+        finalScrollsScrapedCount = 0;
+        // --- END: Reset new state variables ---
         
         // Reset grace period state
         if (isInGracePeriod) {
@@ -1415,10 +1420,7 @@ export default defineContentScript({
         const scraperInitialized = contentScraper.initialize();
         if (scraperInitialized) {
           console.log('AI CONTENT: Analysis system initialized successfully for domain:', getMatchingDomain());
-          
-          // Start capturing content immediately
-          contentScraper.captureCurrentContent();
-          console.log('AI CONTENT: Initial content capture completed');
+          console.log('AI CONTENT: Scraper ready for final scroll capture');
         } else {
           console.log('AI CONTENT: Scraper not initialized (site not monitored or disabled)');
           contentScraper = null;
@@ -1741,11 +1743,13 @@ export default defineContentScript({
         setScrollBlocking(false);
         // Update the last reset time
         lastResetTime = now;
-        // Reset AI analysis flag and new state variables
+        // Reset AI analysis flag
         hasTriggeredAIAnalysis = false;
-        isAwaitingPostTriggerScrolls = false;
-        postTriggerScrollCount = 0;
         isAnalysisInProgress = false;
+        // --- START: Reset new state variables ---
+        isScrapingFinalScrolls = false;
+        finalScrollsScrapedCount = 0;
+        // --- END: Reset new state variables ---
         
         // Reset grace period state
         if (isInGracePeriod) {
@@ -1781,18 +1785,6 @@ export default defineContentScript({
       
       console.log(`SCROLL: Incrementing count for domain: ${domain}, current: ${scrollCount}`);
       
-      // Capture content for AI analysis before incrementing
-      if (contentScraper) {
-        try {
-          contentScraper.captureCurrentContent();
-          console.log('SCROLL: Content captured successfully');
-        } catch (error) {
-          console.error('SCROLL: Error capturing content:', error);
-        }
-      } else {
-        console.warn('SCROLL: Content scraper not available');
-      }
-      
       // Use the background script to handle the storage update
       browser.runtime.sendMessage({
         type: 'INCREMENT_SCROLL',
@@ -1806,30 +1798,35 @@ export default defineContentScript({
           const scrollsRemaining = effectiveMax - scrollCount;
           
           console.log(`SCROLL: Updated count - current: ${scrollCount}, remaining: ${scrollsRemaining}, effective max: ${effectiveMax}`);
-          console.log(`SCROLL: Analysis state - triggered: ${hasTriggeredAIAnalysis}, awaiting: ${isAwaitingPostTriggerScrolls}, post-count: ${postTriggerScrollCount}, in-progress: ${isAnalysisInProgress}`);
           
-          // New analysis logic: check if we are awaiting post-trigger scrolls
-          if (isAwaitingPostTriggerScrolls) {
-            postTriggerScrollCount++;
-            console.log(`AI CONTENT: Post-trigger scroll ${postTriggerScrollCount}/3 captured.`);
-            
-            if (postTriggerScrollCount >= 3) {
-              console.log(`AI CONTENT: Captured 3 post-trigger scrolls. Performing analysis.`);
-              performAIAnalysis();
-              isAwaitingPostTriggerScrolls = false; // Reset state
-              hasTriggeredAIAnalysis = true; // Prevent re-triggering
+          // --- START: New Final Scrolls Scraping Logic ---
+          if (aiAnalyzer && contentScraper && !hasTriggeredAIAnalysis) {
+            // Check if we should START scraping the final scrolls
+            if (!isScrapingFinalScrolls && scrollsRemaining <= FINAL_SCROLLS_TO_SCRAPE) {
+              console.log(`AI CONTENT: Entering final scroll scraping phase. Clearing buffer.`);
+              isScrapingFinalScrolls = true;
+              contentScraper.clearBuffer(); // Clear any old data
             }
-          } else if (aiAnalyzer && contentScraper && scrollsRemaining <= 10 && !hasTriggeredAIAnalysis) {
-            // New trigger point: 10 scrolls remaining
-            console.log(`AI CONTENT: Triggering analysis wait state with ${scrollsRemaining} scrolls remaining.`);
-            isAwaitingPostTriggerScrolls = true;
-            postTriggerScrollCount = 0;
-          } else if (scrollsRemaining <= 5 && !hasTriggeredAIAnalysis && !isAwaitingPostTriggerScrolls && aiAnalyzer && contentScraper) {
-            // Secondary trigger: if user somehow missed the 10-scroll trigger, catch them at 5 scrolls
-            console.log(`AI CONTENT: Secondary trigger at ${scrollsRemaining} scrolls remaining - performing immediate analysis.`);
-            performAIAnalysis();
-            hasTriggeredAIAnalysis = true;
+
+            // If we are in the final scraping phase, capture content
+            if (isScrapingFinalScrolls) {
+              try {
+                contentScraper.captureCurrentContent();
+                finalScrollsScrapedCount++;
+                console.log(`AI CONTENT: Captured final scroll ${finalScrollsScrapedCount}/${FINAL_SCROLLS_TO_SCRAPE}.`);
+              } catch (error) {
+                console.error('SCROLL: Error capturing final scroll content:', error);
+              }
+
+              // If we have scraped enough final scrolls, trigger the analysis
+              if (finalScrollsScrapedCount >= FINAL_SCROLLS_TO_SCRAPE) {
+                console.log(`AI CONTENT: All ${FINAL_SCROLLS_TO_SCRAPE} final scrolls captured. Triggering analysis.`);
+                performAIAnalysis();
+                hasTriggeredAIAnalysis = true; // Mark analysis as done
+              }
+            }
           }
+          // --- END: New Final Scrolls Scraping Logic ---
           
           // Check against the effective limit (custom or global)
           if (scrollCount >= effectiveMax) {
@@ -2347,15 +2344,7 @@ export default defineContentScript({
         }
       } else {
         console.log('TAB: Tab became visible');
-        // Optionally restart content capture if scraper exists
-        if (contentScraper && !isBlocked) {
-          try {
-            contentScraper.captureCurrentContent();
-            console.log('TAB: Resumed content capture on tab focus');
-          } catch (error) {
-            console.error('TAB: Error resuming content capture:', error);
-          }
-        }
+        // Content capture will resume automatically when scrolling in final phase
       }
     });
 
