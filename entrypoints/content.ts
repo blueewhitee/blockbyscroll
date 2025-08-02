@@ -1494,6 +1494,16 @@ export default defineContentScript({
           // Check if we should end grace period based on results
           let grantedBonusScrolls = false;
           
+          console.log(`AI CONTENT: Processing recommendations:`, {
+            recommendedAction: analysisResult.analysis.recommended_action,
+            backendBonusScrolls: analysisResult.analysis.bonus_scrolls,
+            currentScrollCount: scrollCount,
+            currentEffectiveLimit: getEffectiveScrollLimit(),
+            recommendedNewMaxScrolls: recommendations.newMaxScrolls,
+            addictionRisk: analysisResult.analysis.addiction_risk,
+            educationalValue: analysisResult.analysis.educational_value
+          });
+          
           // Update scroll limit if bonus scrolls awarded
           if (recommendations.newMaxScrolls > getEffectiveScrollLimit()) {
             const currentLimit = getEffectiveScrollLimit();
@@ -1505,6 +1515,8 @@ export default defineContentScript({
             console.log(`AI CONTENT: Added ${bonusScrolls} temporary bonus scrolls. New effective limit: ${getEffectiveScrollLimit()}`);
             updateCounter();
             grantedBonusScrolls = true;
+          } else {
+            console.log(`AI CONTENT: No bonus scrolls granted. Backend sent ${analysisResult.analysis.bonus_scrolls} bonus_scrolls, but recommended action was "${analysisResult.analysis.recommended_action}"`);
           }
           
           // End grace period if active

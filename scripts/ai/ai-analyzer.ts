@@ -210,6 +210,15 @@ export class AIContentAnalyzer {
     userPattern?: string;
   } {
     const { recommended_action, bonus_scrolls, reasoning, break_suggestion, user_pattern } = analysis;
+    
+    console.log(`AI ANALYZER: Processing backend response:`, {
+      recommended_action,
+      bonus_scrolls,
+      currentMaxScrolls,
+      reasoning,
+      addiction_risk: analysis.addiction_risk,
+      educational_value: analysis.educational_value
+    });
 
     // Track the user pattern if available
     if (user_pattern && domain) {
@@ -224,8 +233,10 @@ export class AIContentAnalyzer {
 
     switch (recommended_action) {
       case 'session_extension':
+        const sessionBonusScrolls = bonus_scrolls > 0 ? bonus_scrolls : 15; // Use backend value if provided, else default
+        console.log(`AI ANALYZER: session_extension - using ${sessionBonusScrolls} bonus scrolls (backend sent: ${bonus_scrolls})`);
         return {
-          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 15), // Default 15-20 scrolls for deep learning
+          newMaxScrolls: currentMaxScrolls + sessionBonusScrolls,
           shouldShowOverlay: true,
           overlayMessage: `🎯 Deep Focus Detected! Keep learning! ${reasoning}`,
           overlayType: 'encouragement',
@@ -233,8 +244,10 @@ export class AIContentAnalyzer {
         };
 
       case 'gentle_reward':
+        const rewardBonusScrolls = bonus_scrolls > 0 ? bonus_scrolls : 3; // Use backend value if provided, else default
+        console.log(`AI ANALYZER: gentle_reward - using ${rewardBonusScrolls} bonus scrolls (backend sent: ${bonus_scrolls})`);
         return {
-          newMaxScrolls: currentMaxScrolls + (bonus_scrolls || 3), // Default 3-5 scrolls for quality content
+          newMaxScrolls: currentMaxScrolls + rewardBonusScrolls,
           shouldShowOverlay: true,
           overlayMessage: `😊 Quality Time! Enjoying some quality content! ${reasoning}`,
           overlayType: 'encouragement',
@@ -242,6 +255,7 @@ export class AIContentAnalyzer {
         };
 
       case 'bonus_scrolls': // Legacy support
+        console.log(`AI ANALYZER: bonus_scrolls (legacy) - using ${bonus_scrolls} bonus scrolls from backend`);
         return {
           newMaxScrolls: currentMaxScrolls + bonus_scrolls,
           shouldShowOverlay: true,
@@ -251,29 +265,59 @@ export class AIContentAnalyzer {
         };
 
       case 'show_warning':
+        console.log(`AI ANALYZER: show_warning - using ${bonus_scrolls} bonus scrolls from backend (backend sent: ${bonus_scrolls})`);
+        
+        // Create friendly message based on whether bonus scrolls are granted
+        let warningMessage;
+        if (bonus_scrolls > 0) {
+          warningMessage = `⚠️ Mixed content detected! Added ${bonus_scrolls} bonus scrolls. Consider mindful browsing! 🧠`;
+        } else {
+          warningMessage = `⚠️ Check Your Focus: ${reasoning}. Consider taking a break soon.`;
+        }
+        
         return {
-          newMaxScrolls: currentMaxScrolls,
+          newMaxScrolls: currentMaxScrolls + bonus_scrolls, // Always use backend value
           shouldShowOverlay: true,
-          overlayMessage: `⚠️ Check Your Focus: ${reasoning}. Consider taking a break soon.`,
+          overlayMessage: warningMessage,
           overlayType: 'warning',
           userPattern: user_pattern
         };
 
       case 'immediate_break':
+        console.log(`AI ANALYZER: immediate_break - using ${bonus_scrolls} bonus scrolls from backend (backend sent: ${bonus_scrolls})`);
+        
+        // Create friendly message based on whether bonus scrolls are granted
+        let overlayMessage;
+        if (bonus_scrolls > 0) {
+          overlayMessage = `🎯 Noticed some mindless browsing! Here's ${bonus_scrolls} bonus scrolls to satisfy the craving. Try reducing gradually! 😊`;
+        } else {
+          overlayMessage = `🛑 Time for a Break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`;
+        }
+        
         return {
-          newMaxScrolls: currentMaxScrolls,
+          newMaxScrolls: currentMaxScrolls + bonus_scrolls, // Always use backend value
           shouldShowOverlay: true,
-          overlayMessage: `🛑 Time for a Break! ${reasoning}${break_suggestion ? ` Try: ${break_suggestion}` : ''}`,
+          overlayMessage: overlayMessage,
           overlayType: 'break',
           userPattern: user_pattern
         };
 
       case 'maintain_limit':
       default:
+        console.log(`AI ANALYZER: maintain_limit/default - using ${bonus_scrolls} bonus scrolls from backend (backend sent: ${bonus_scrolls})`);
+        
+        // Create friendly message based on whether bonus scrolls are granted
+        let maintainMessage;
+        if (bonus_scrolls > 0) {
+          maintainMessage = `📱 Regular browsing spotted! Added ${bonus_scrolls} bonus scrolls. Keep it balanced! ⚖️`;
+        } else {
+          maintainMessage = `📱 Mindful Browsing: ${reasoning || 'Continue browsing mindfully'}`;
+        }
+        
         return {
-          newMaxScrolls: currentMaxScrolls,
+          newMaxScrolls: currentMaxScrolls + bonus_scrolls, // Always use backend value
           shouldShowOverlay: true,
-          overlayMessage: `📱 Mindful Browsing: ${reasoning || 'Continue browsing mindfully'}`,
+          overlayMessage: maintainMessage,
           overlayType: 'warning',
           userPattern: user_pattern
         };
