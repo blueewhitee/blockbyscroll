@@ -367,8 +367,8 @@ export default defineBackground(() => {
             analysis: {
               content_type: 'unknown',
               confidence_score: 0,
-              educational_value: 5,
-              addiction_risk: 5,
+              educational_value: 0.5, // Changed to 0.0-1.0 scale to match backend
+              addiction_risk: 0.5, // Changed to 0.0-1.0 scale to match backend
               recommended_action: 'maintain_limit',
               bonus_scrolls: 0,
               reasoning: 'API unavailable, maintaining original scroll limit'
