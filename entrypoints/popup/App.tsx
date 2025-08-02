@@ -190,37 +190,40 @@ export default function App() {
     if (!editingSite) return;
     
     const limit = parseInt(customLimitInput);
+    let updatedCustomLimits;
+    
     if (!isNaN(limit) && limit > 0) {
-      setCustomLimits(prev => ({ ...prev, [editingSite]: limit }));
+      updatedCustomLimits = { ...customLimits, [editingSite]: limit };
+      setCustomLimits(updatedCustomLimits);
     } else if (customLimitInput === '') {
-      setCustomLimits(prev => {
-        const updated = { ...prev };
-        delete updated[editingSite];
-        return updated;
-      });
+      updatedCustomLimits = { ...customLimits };
+      delete updatedCustomLimits[editingSite];
+      setCustomLimits(updatedCustomLimits);
+    } else {
+      updatedCustomLimits = customLimits;
     }
     
-    if (isEditingYoutube || isEditingXCom) {
-      browser.runtime.sendMessage({
-        type: 'SAVE_SETTINGS',
-        maxScrolls,
-        distractingSites,
-        resetInterval,        customLimits: !isNaN(limit) && limit > 0 ? 
-          {...customLimits, [editingSite]: limit} : 
-          {...customLimits},
-        youtubeSettings,
-        instagramSettings,
-        videoOverlaySettings
-      })
-      .then(() => {
-        setSaveStatus('Saved!');
-        setTimeout(() => setSaveStatus(''), 2000);
-      })
-      .catch(error => {
-        console.error('Error saving settings:', error);
-        setSaveStatus('Error saving');
-      });
-    }
+    // Auto-save for all sites, not just YouTube and X.com
+    setSaveStatus('Saving...');
+    browser.runtime.sendMessage({
+      type: 'SAVE_SETTINGS',
+      maxScrolls,
+      distractingSites,
+      resetInterval,
+      customLimits: updatedCustomLimits,
+      youtubeSettings,
+      instagramSettings,
+      videoOverlaySettings
+    })
+    .then(() => {
+      setSaveStatus('Custom limit saved!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    })
+    .catch(error => {
+      console.error('Error saving settings:', error);
+      setSaveStatus('Error saving');
+      setTimeout(() => setSaveStatus(''), 2000);
+    });
     
     setEditingSite(null);
   };
@@ -328,24 +331,69 @@ export default function App() {
       .split('/')[0];
 
     if (formattedSite && !distractingSites.includes(formattedSite)) {
-      setDistractingSites([...distractingSites, formattedSite]);
-      setScrollCounts(prev => ({ ...prev, [formattedSite]: 0 }));
+      const updatedSites = [...distractingSites, formattedSite];
+      const updatedScrollCounts = { ...scrollCounts, [formattedSite]: 0 };
+      
+      setDistractingSites(updatedSites);
+      setScrollCounts(updatedScrollCounts);
       setNewSite('');
+      
+      // Auto-save the settings immediately
+      setSaveStatus('Saving...');
+      browser.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        maxScrolls,
+        distractingSites: updatedSites,
+        resetInterval,
+        customLimits,
+        youtubeSettings,
+        instagramSettings,
+        videoOverlaySettings
+      })
+        .then(() => {
+          setSaveStatus('Site added!');
+          setTimeout(() => setSaveStatus(''), 2000);
+        })
+        .catch(error => {
+          console.error('Error saving settings:', error);
+          setSaveStatus('Error saving');
+          setTimeout(() => setSaveStatus(''), 2000);
+        });
     }
   };
 
   const handleRemoveSite = (siteToRemove: string) => {
-    setDistractingSites(distractingSites.filter(site => site !== siteToRemove));
-    setScrollCounts(prev => {
-      const updated = { ...prev };
-      delete updated[siteToRemove];
-      return updated;
-    });
-    setCustomLimits(prev => {
-      const updated = { ...prev };
-      delete updated[siteToRemove];
-      return updated;
-    });
+    const updatedSites = distractingSites.filter(site => site !== siteToRemove);
+    const updatedScrollCounts = { ...scrollCounts };
+    delete updatedScrollCounts[siteToRemove];
+    const updatedCustomLimits = { ...customLimits };
+    delete updatedCustomLimits[siteToRemove];
+    
+    setDistractingSites(updatedSites);
+    setScrollCounts(updatedScrollCounts);
+    setCustomLimits(updatedCustomLimits);
+    
+    // Auto-save the settings immediately
+    setSaveStatus('Saving...');
+    browser.runtime.sendMessage({
+      type: 'SAVE_SETTINGS',
+      maxScrolls,
+      distractingSites: updatedSites,
+      resetInterval,
+      customLimits: updatedCustomLimits,
+      youtubeSettings,
+      instagramSettings,
+      videoOverlaySettings
+    })
+      .then(() => {
+        setSaveStatus('Site removed!');
+        setTimeout(() => setSaveStatus(''), 2000);
+      })
+      .catch(error => {
+        console.error('Error saving settings:', error);
+        setSaveStatus('Error saving');
+        setTimeout(() => setSaveStatus(''), 2000);
+      });
   };
 
   const handleResetIntervalChange = (value: number) => {
