@@ -1440,8 +1440,23 @@ export default defineContentScript({
         return;
       }
 
+      // Check if Smart Scroll is enabled before performing analysis
       try {
-        console.log('AI CONTENT: Starting content analysis...');
+        const settings = await browser.storage.sync.get(['smartScrollEnabled']);
+        const isSmartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
+        
+        if (!isSmartScrollEnabled) {
+          console.log('AI CONTENT: Smart Scroll is disabled, skipping content analysis and data collection');
+          isAnalysisInProgress = false;
+          return;
+        }
+      } catch (error) {
+        console.error('AI CONTENT: Error checking Smart Scroll state:', error);
+        // Default to enabled if can't check state
+      }
+
+      try {
+        console.log('AI CONTENT: Smart Scroll enabled, starting content analysis...');
         isAnalysisInProgress = true; // Set lock
         hasTriggeredAIAnalysis = true;
         
@@ -1645,6 +1660,84 @@ export default defineContentScript({
       return true;
     }
 
+    // Show random bonus overlay
+    function showRandomBonusOverlay(bonusScrolls: number) {
+      // Create surprise bonus overlay
+      const randomBonusOverlay = document.createElement('div');
+      randomBonusOverlay.id = 'random-bonus-overlay';
+      randomBonusOverlay.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(5, 150, 105, 0.95));
+        color: white;
+        padding: 25px 35px;
+        border-radius: 16px;
+        max-width: 450px;
+        text-align: center;
+        z-index: 2147483645;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      `;
+
+      randomBonusOverlay.innerHTML = `
+        <div style="font-size: 32px; margin-bottom: 15px;">🎉</div>
+        <h3 style="margin: 0 0 10px 0; font-size: 20px; font-weight: 600;">Surprise!</h3>
+        <p style="margin: 0 0 15px 0; font-size: 16px; opacity: 0.9; line-height: 1.4;">
+          Here are ${bonusScrolls} bonus scrolls to fulfill your craving!
+        </p>
+        <div style="font-size: 14px; opacity: 0.8;">
+          Random bonus granted • No data collected
+        </div>
+      `;
+
+      // Add bounce animation keyframes if not already added
+      if (!document.getElementById('random-bonus-animations')) {
+        const style = document.createElement('style');
+        style.id = 'random-bonus-animations';
+        style.textContent = `
+          @keyframes bounceIn {
+            0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+            70% { transform: translate(-50%, -50%) scale(0.9); }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      document.body.appendChild(randomBonusOverlay);
+
+      // Auto-close after 4 seconds
+      setTimeout(() => {
+        if (randomBonusOverlay && randomBonusOverlay.parentElement) {
+          randomBonusOverlay.style.animation = 'fadeOut 0.3s ease-out forwards';
+          setTimeout(() => {
+            if (randomBonusOverlay.parentElement) {
+              randomBonusOverlay.remove();
+            }
+          }, 300);
+        }
+      }, 4000);
+
+      // Add fadeOut animation
+      if (!document.getElementById('random-bonus-fadeout')) {
+        const fadeStyle = document.createElement('style');
+        fadeStyle.id = 'random-bonus-fadeout';
+        fadeStyle.textContent = `
+          @keyframes fadeOut {
+            from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+          }
+        `;
+        document.head.appendChild(fadeStyle);
+      }
+    }
+
     // Show AI recommendation overlay with enhanced pattern information
     function showAIRecommendationOverlay(recommendations: any) {
       let aiOverlay = document.getElementById('ai-recommendation-overlay');
@@ -1813,30 +1906,70 @@ export default defineContentScript({
           
           // --- START: New Final Scrolls Scraping Logic ---
           if (aiAnalyzer && contentScraper && !hasTriggeredAIAnalysis) {
-            // Check if we should START scraping the final scrolls
-            if (!isScrapingFinalScrolls && scrollsRemaining <= FINAL_SCROLLS_TO_SCRAPE) {
-              console.log(`AI CONTENT: Entering final scroll scraping phase. Clearing buffer.`);
-              isScrapingFinalScrolls = true;
-              contentScraper.clearBuffer(); // Clear any old data
-            }
-
-            // If we are in the final scraping phase, capture content
-            if (isScrapingFinalScrolls) {
-              try {
-                contentScraper.captureCurrentContent();
-                finalScrollsScrapedCount++;
-                console.log(`AI CONTENT: Captured final scroll ${finalScrollsScrapedCount}/${FINAL_SCROLLS_TO_SCRAPE}.`);
-              } catch (error) {
-                console.error('SCROLL: Error capturing final scroll content:', error);
+            // Check if Smart Scroll is enabled before scraping
+            browser.storage.sync.get(['smartScrollEnabled']).then(settings => {
+              const isSmartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
+              
+              if (!isSmartScrollEnabled) {
+                console.log('AI CONTENT: Smart Scroll is disabled, skipping content scraping');
+                return;
               }
 
-              // If we have scraped enough final scrolls, trigger the analysis
-              if (finalScrollsScrapedCount >= FINAL_SCROLLS_TO_SCRAPE) {
-                console.log(`AI CONTENT: All ${FINAL_SCROLLS_TO_SCRAPE} final scrolls captured. Triggering analysis.`);
-                performAIAnalysis();
-                hasTriggeredAIAnalysis = true; // Mark analysis as done
+              // Smart Scroll is enabled, proceed with scraping
+              console.log('AI CONTENT: Smart Scroll enabled, proceeding with content scraping');
+              
+              // Ensure contentScraper is still available
+              if (!contentScraper) return;
+              
+              // Check if we should START scraping the final scrolls
+              if (!isScrapingFinalScrolls && scrollsRemaining <= FINAL_SCROLLS_TO_SCRAPE) {
+                console.log(`AI CONTENT: Entering final scroll scraping phase. Clearing buffer.`);
+                isScrapingFinalScrolls = true;
+                contentScraper.clearBuffer(); // Clear any old data
               }
-            }
+
+              // If we are in the final scraping phase, capture content
+              if (isScrapingFinalScrolls && contentScraper) {
+                try {
+                  contentScraper.captureCurrentContent();
+                  finalScrollsScrapedCount++;
+                  console.log(`AI CONTENT: Captured final scroll ${finalScrollsScrapedCount}/${FINAL_SCROLLS_TO_SCRAPE}.`);
+                } catch (error) {
+                  console.error('SCROLL: Error capturing final scroll content:', error);
+                }
+
+                // If we have scraped enough final scrolls, trigger the analysis
+                if (finalScrollsScrapedCount >= FINAL_SCROLLS_TO_SCRAPE) {
+                  console.log(`AI CONTENT: All ${FINAL_SCROLLS_TO_SCRAPE} final scrolls captured. Triggering analysis.`);
+                  performAIAnalysis();
+                  hasTriggeredAIAnalysis = true; // Mark analysis as done
+                }
+              }
+            }).catch(error => {
+              console.error('AI CONTENT: Error checking Smart Scroll state for scraping:', error);
+              // Default behavior - continue scraping if can't check state
+              if (!contentScraper) return;
+              
+              if (!isScrapingFinalScrolls && scrollsRemaining <= FINAL_SCROLLS_TO_SCRAPE) {
+                console.log(`AI CONTENT: Entering final scroll scraping phase. Clearing buffer.`);
+                isScrapingFinalScrolls = true;
+                contentScraper.clearBuffer();
+              }
+              if (isScrapingFinalScrolls && contentScraper) {
+                try {
+                  contentScraper.captureCurrentContent();
+                  finalScrollsScrapedCount++;
+                  console.log(`AI CONTENT: Captured final scroll ${finalScrollsScrapedCount}/${FINAL_SCROLLS_TO_SCRAPE}.`);
+                } catch (error) {
+                  console.error('SCROLL: Error capturing final scroll content:', error);
+                }
+                if (finalScrollsScrapedCount >= FINAL_SCROLLS_TO_SCRAPE) {
+                  console.log(`AI CONTENT: All ${FINAL_SCROLLS_TO_SCRAPE} final scrolls captured. Triggering analysis.`);
+                  performAIAnalysis();
+                  hasTriggeredAIAnalysis = true;
+                }
+              }
+            });
           }
           // --- END: New Final Scrolls Scraping Logic ---
           
@@ -1850,23 +1983,58 @@ export default defineContentScript({
                 return;
               }
             } else {
-              // First time hitting limit - check if we should start grace period
-              const shouldStartGrace = isAnalysisInProgress || (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper);
-              
-              if (shouldStartGrace) {
-                // Start analysis if not already triggered
-                if (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper) {
-                  console.log('AI CONTENT: Analysis triggered at scroll limit');
-                  performAIAnalysis();
-                  hasTriggeredAIAnalysis = true;
-                }
+              // First time hitting limit - check Smart Scroll state
+              browser.storage.sync.get(['smartScrollEnabled']).then(settings => {
+                const isSmartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
                 
-                // Start grace period
-                startGracePeriod();
-              } else {
-                // No analysis available or already completed - block immediately
+                if (isSmartScrollEnabled) {
+                  // Smart Scroll is ON - use AI analysis and grace period
+                  const shouldStartGrace = isAnalysisInProgress || (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper);
+                  
+                  if (shouldStartGrace) {
+                    // Start analysis if not already triggered
+                    if (!hasTriggeredAIAnalysis && aiAnalyzer && contentScraper) {
+                      console.log('AI CONTENT: Analysis triggered at scroll limit');
+                      performAIAnalysis();
+                      hasTriggeredAIAnalysis = true;
+                    }
+                    
+                    // Start grace period with analysis overlay
+                    startGracePeriod();
+                  } else {
+                    // No analysis available or already completed - block immediately
+                    setScrollBlocking(true);
+                  }
+                } else {
+                  // Smart Scroll is OFF - use random bonus scroll system
+                  console.log('RANDOM BONUS: Smart Scroll disabled, checking for random bonus scrolls');
+                  
+                  // Generate random chance (40% probability)
+                  const randomChance = Math.random();
+                  const shouldGetBonus = randomChance < 0.4; // 40% chance
+                  
+                  if (shouldGetBonus) {
+                    // Grant 3 bonus scrolls
+                    const domain = getMatchingDomain();
+                    const bonusScrolls = 3;
+                    temporaryBonusScrolls[domain] = (temporaryBonusScrolls[domain] || 0) + bonusScrolls;
+                    
+                    console.log(`RANDOM BONUS: Lucky! Granted ${bonusScrolls} bonus scrolls (${randomChance.toFixed(3)} < 0.4)`);
+                    updateCounter();
+                    
+                    // Show surprise bonus overlay
+                    showRandomBonusOverlay(bonusScrolls);
+                  } else {
+                    // No bonus, just block
+                    console.log(`RANDOM BONUS: No bonus this time (${randomChance.toFixed(3)} >= 0.4)`);
+                    setScrollBlocking(true);
+                  }
+                }
+              }).catch(error => {
+                console.error('RANDOM BONUS: Error checking Smart Scroll state:', error);
+                // Default to blocking if can't check state
                 setScrollBlocking(true);
-              }
+              });
             }
           }
         } else {

@@ -4,7 +4,7 @@ import Onboarding from './Onboarding';
 
 export default function App() {
   // Onboarding state
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(true); // Set to true for testing
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false); // Will be set based on storage
   const [currentSlide, setCurrentSlide] = useState<number>(1);
   
   const [maxScrolls, setMaxScrolls] = useState<number>(30);
@@ -119,6 +119,14 @@ export default function App() {
         // Load Smart Scroll state from settings or default to true
         const smartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
         setIsSmartScrollEnabled(smartScrollEnabled);
+        
+        // Check if onboarding has been completed (first-time users will see onboarding)
+        const onboardingCompleted = settings.onboardingCompleted === true; // Explicitly check for true
+        setShowOnboarding(!onboardingCompleted);
+        
+        if (!onboardingCompleted) {
+          console.log('First-time user detected, showing onboarding');
+        }
         
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
@@ -502,9 +510,22 @@ export default function App() {
     setCurrentSlide(prev => prev + 1);
   };
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = async (smartLimitsEnabled: boolean) => {
     setShowOnboarding(false);
-    // TODO: Save onboarding completion status to storage
+    
+    // Set Smart Scroll state based on onboarding choice
+    setIsSmartScrollEnabled(smartLimitsEnabled);
+    
+    // Save both onboarding completion and Smart Scroll preference to storage
+    try {
+      await browser.storage.sync.set({ 
+        onboardingCompleted: true,
+        smartScrollEnabled: smartLimitsEnabled 
+      });
+      console.log('Onboarding completed. Smart Scroll enabled:', smartLimitsEnabled);
+    } catch (error) {
+      console.error('Error saving onboarding completion:', error);
+    }
   };
 
   if (isLoading) {

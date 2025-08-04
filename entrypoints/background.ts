@@ -111,10 +111,25 @@ export default defineBackground(() => {
     if (message.type === 'AI_ANALYZE_CONTENT') {
       (async () => {
         try {
+          // Check if Smart Scroll is enabled before processing
+          const settings = await browser.storage.sync.get(['smartScrollEnabled']);
+          const isSmartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
+          
+          if (!isSmartScrollEnabled) {
+            console.log('🚫 BACKGROUND: Smart Scroll is disabled, rejecting AI analysis request');
+            sendResponse({
+              success: false,
+              error: 'Smart Scroll is disabled - data collection and analysis skipped'
+            });
+            return;
+          }
+
           // Validate payload
           if (!message.content || typeof message.content !== 'string' || !message.context) {
             throw new Error('Invalid payload format');
           }
+
+          console.log('✅ BACKGROUND: Smart Scroll enabled, processing AI analysis request');
 
           // Timeout setup (15 seconds to prevent hanging)
           const controller = new AbortController();
@@ -180,7 +195,7 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings', 'smartScrollEnabled']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings', 'smartScrollEnabled', 'onboardingCompleted']).then(sendResponse);
       return true; // Required for async response
     }
     

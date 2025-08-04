@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './Onboarding.css';
 import './App.css'; // Import to access container styles
 
 interface OnboardingProps {
   currentSlide: number;
   onNext: () => void;
-  onComplete: () => void;
+  onComplete: (smartLimitsEnabled: boolean) => void;
 }
 
 export default function Onboarding({ currentSlide, onNext, onComplete }: OnboardingProps) {
+  const [smartLimitsEnabled, setSmartLimitsEnabled] = useState<boolean>(false); // Default to disabled
+  
   const slides = [
     {
       id: 1,
@@ -40,10 +42,14 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
 
   const handleButtonClick = () => {
     if (currentSlide === 3) {
-      onComplete();
+      onComplete(smartLimitsEnabled);
     } else {
       onNext();
     }
+  };
+
+  const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSmartLimitsEnabled(event.target.checked);
   };
 
   return (
@@ -67,7 +73,11 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
           {currentSlide === 3 && (
             <div className="ai-insights-checkbox">
               <label className="checkbox-container">
-                <input type="checkbox" />
+                <input 
+                  type="checkbox" 
+                  checked={smartLimitsEnabled}
+                  onChange={handleCheckboxChange}
+                />
                 <span className="checkmark"></span>
                 <span className="checkbox-text">Enable Smart Limits</span>
               </label>
