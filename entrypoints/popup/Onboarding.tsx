@@ -20,7 +20,7 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
     },
     {
       id: 2,
-      title: "Smart Scroll Limits",
+      title: "Custom Scroll Limits",
       subtitle: "Set boundaries that matter",
       content: "",
       image: "/scroll-limit-demo.png",
@@ -28,9 +28,9 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
     },
     {
       id: 3,
-      title: "Enable AI Insights",
+      title: "Intelligent Limits",
       subtitle: "",
-      content: "NoMoScroll uses AI (anonymously and without storing content) to give you bonus scrolls when you're really engaged, like now!",
+      content: "Get More Time for What Matters",
       image: "/croper_deep.PNG",
       buttonText: "Start Using"
     }
@@ -60,8 +60,26 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
             <img 
               src={currentSlideData.image} 
               alt="Feature demonstration"
-              className={`slide-image ${currentSlide === 3 ? 'slide-image-large' : ''} ${currentSlide === 1 ? 'slide-image-no-padding' : ''}`}
+              className={`slide-image ${currentSlide === 3 ? 'slide-image-large' : ''} ${currentSlide === 1 ? 'slide-image-no-padding' : ''} ${currentSlide === 2 ? 'slide-image-no-shadow' : ''}`}
             />
+          )}
+          {/* Checkbox for 3rd slide */}
+          {currentSlide === 3 && (
+            <div className="ai-insights-checkbox">
+              <label className="checkbox-container">
+                <input type="checkbox" />
+                <span className="checkmark"></span>
+                <span className="checkbox-text">Enable Smart Limits</span>
+              </label>
+            </div>
+          )}
+          {/* Description text for 3rd slide - separate div */}
+          {currentSlide === 3 && (
+            <div className="ai-insights-description-container">
+              <p className="ai-insights-description">
+                anonymously and without storing content to give you bonus scrolls when you're really engaged
+              </p>
+            </div>
           )}
           {/* For slide 2 only, show content after image */}
           {currentSlide === 2 && currentSlideData.content && (
@@ -69,7 +87,7 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
           )}
         </div>
 
-        <div className={`onboarding-actions ${currentSlide === 2 ? 'slide-2-actions' : ''}`}>
+        <div className={`onboarding-actions ${currentSlide === 2 ? 'slide-2-actions' : ''} ${currentSlide === 3 ? 'slide-3-actions' : ''}`}>
           <button 
             className="onboarding-button primary"
             onClick={handleButtonClick}
