@@ -251,6 +251,12 @@ button:hover::before {
   box-shadow: 0 8px 25px 0 rgba(239, 68, 68, 0.4);
 }
 
+/* Smart Scroll Button */
+.smart-scroll-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(16, 185, 129, 0.4) !important;
+}
+
 .info-box {
   background: linear-gradient(145deg, #f8fafc 0%, var(--accent-light) 100%);
   border-radius: 12px;

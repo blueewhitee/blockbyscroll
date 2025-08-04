@@ -33,12 +33,6 @@ NoMoScroll is a comprehensive browser extension designed to help you maintain he
 - **Instagram Reels Blocking**: Hide Instagram Reels from feeds
 - **Promoted Content Detection**: Special handling for sponsored/promoted content
 
-### Pomodoro Integration
-- **Built-in Pomodoro Timer**: Focus sessions with automatic break prompts
-- **Scroll Counter Reset**: Counters reset during Pomodoro breaks
-- **Productivity Tracking**: Monitor focus time alongside scroll behavior
-- **Break Reminders**: Smart notifications for healthy break timing
-
 ## Why NoMoScroll?
 
 Modern digital platforms are engineered to maximize engagement and keep users scrolling indefinitely. This design philosophy can lead to:
@@ -52,7 +46,6 @@ Modern digital platforms are engineered to maximize engagement and keep users sc
 - 📊 Track your scrolling activity 
 - 🛑 Set custom scroll limits to prevent endless doomscrolling
 - 📱 Visual indicators showing your current scroll progress
-- 🔄 pomodoro to help you quickly focus on tasks without any burnout
 - ⏱️ Optional auto-reset timer to refresh counters automatically
 - ⚙️ Customizable blocklist to manage which sites are monitored
 - 🚫 Block YouTube Shorts and homepage to reduce distractions and time waste
@@ -152,26 +145,20 @@ Click on any site icon in your blocked sites list to access advanced features:
 - **Break Suggestions**: Receive personalized break recommendations
 - **Content Quality Tracking**: Monitor the quality of content you consume
 
-#### Pomodoro Integration
-- Set focus sessions with automatic scroll counter resets
-- Receive break notifications based on productivity patterns
-- Track focused vs. distracted browsing time
-
 ### Daily Usage Workflow
 
-1. **Start Your Session**: Open the extension and optionally set a Pomodoro timer
+1. **Start Your Session**: Open the extension and start browsing mindfully
 2. **Browse Mindfully**: The extension tracks your activity across monitored sites
 3. **Monitor Progress**: Check the scroll counter in the bottom-right corner
 4. **Receive AI Insights**: Get real-time content quality feedback and recommendations
 5. **Manage Videos**: Click "View Video" buttons to consciously engage with video content
-6. **Take Breaks**: Follow AI suggestions or Pomodoro prompts for optimal break timing
+6. **Take Breaks**: Follow AI suggestions for optimal break timing
 7. **Reset When Needed**: Use manual reset or let automatic timers refresh your limits
 
 ### Pro Tips
 - **Custom Limits**: Set lower limits for high-distraction sites and higher limits for educational sites
 - **Video Overlays**: Use them to reduce impulsive video consumption on social media
 - **AI Analysis**: Pay attention to content quality scores to improve your browsing habits
-- **Pomodoro Mode**: Combine with focus sessions for maximum productivity
 
 ## Privacy & Security
 

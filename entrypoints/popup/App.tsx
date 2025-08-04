@@ -45,6 +45,9 @@ export default function App() {
   const [showPomodoroCompletePopup, setShowPomodoroCompletePopup] = useState<boolean>(false);
   const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
   
+  // Smart Scroll toggle state
+  const [isSmartScrollEnabled, setIsSmartScrollEnabled] = useState<boolean>(true);
+  
   // Behavior insights state
   const [currentPattern, setCurrentPattern] = useState<string>('Casual Browsing/Catch-up');
   const [recentPatterns, setRecentPatterns] = useState<string[]>([]);
@@ -56,18 +59,16 @@ export default function App() {
   } | null>(null);
 
   useEffect(() => {
-    // Check for URL parameters to handle pomodoro completion popup
+    // Pomodoro completion popup handling disabled
+    // Check for URL parameters to handle pomodoro completion popup - DISABLED
     const urlParams = new URLSearchParams(window.location.search);
     const action = urlParams.get('action');
     const duration = urlParams.get('duration');
     
     if (action === 'pomodoro_complete' && duration) {
-      const durationNum = parseInt(duration, 10);
-      if (!isNaN(durationNum)) {
-        setCompletedPomodoroDuration(durationNum);
-        setShowPomodoroCompletePopup(true);
-        return; // Skip the normal tab querying if showing completion popup
-      }
+      // Pomodoro completion functionality disabled
+      console.log('Pomodoro completion popup disabled');
+      // Skip showing the completion popup
     }
 
     // Get current active tab to identify the current domain
@@ -114,6 +115,10 @@ export default function App() {
         if (settings.videoOverlaySettings) {
           setVideoOverlaySettings(settings.videoOverlaySettings);
         }
+        
+        // Load Smart Scroll state from settings or default to true
+        const smartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
+        setIsSmartScrollEnabled(smartScrollEnabled);
         
         setResetInterval(settings.resetInterval || 0);
         setIsLoading(false);
@@ -262,68 +267,40 @@ export default function App() {
       });
   };
 
-  const handleReset = () => {
-    setShowPomodoroPopup(true);
+  const handleSmartScrollToggle = () => {
+    const newState = !isSmartScrollEnabled;
+    setIsSmartScrollEnabled(newState);
+    
+    // Apply/remove smart scroll functionality immediately via background script
+    browser.runtime.sendMessage({
+      type: 'TOGGLE_SMART_SCROLL',
+      enabled: newState
+    }).then(() => {
+      // Update status message on success
+      setSaveStatus(newState ? 'Smart Scroll Enabled!' : 'Smart Scroll Disabled!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    }).catch(error => {
+      console.error('Error toggling smart scroll:', error);
+      // Revert state on error
+      setIsSmartScrollEnabled(!newState);
+      setSaveStatus('Error toggling Smart Scroll');
+      setTimeout(() => setSaveStatus(''), 2000);
+    });
   };
 
   const handlePomodoroDone = () => {
-    const minutes = parseInt(pomodoroMinutes);
-    if (!isNaN(minutes) && minutes > 0) {
-      setSaveStatus('Starting pomodoro timer...');
-      
-      browser.tabs.query({ active: true, currentWindow: true })
-        .then(tabs => {
-          if (tabs.length === 0) return;
-          const activeTab = tabs[0];
-          
-          return browser.runtime.sendMessage({ 
-            type: 'SET_POMODORO', 
-            minutes: minutes,
-            sourceTabId: activeTab.id 
-          });
-        })
-        .then(() => {
-          console.log('Pomodoro timer started successfully');
-          setSaveStatus(`Pomodoro set for ${minutes} minutes!`);
-            const successMessage = document.createElement('div');
-          successMessage.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background-color: rgba(76, 175, 80, 0.95); color: white; padding: 20px;
-            border-radius: 10px; text-align: center; font-weight: bold;
-            z-index: 10000; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-          `;
-          successMessage.innerHTML = `
-            <div style="font-size: 48px; margin-bottom: 10px;">🍅</div>
-            <div style="font-size: 18px; margin-bottom: 5px;">Pomodoro Timer Started!</div>
-            <div style="font-size: 16px; opacity: 0.9;">${minutes} minute${minutes !== 1 ? 's' : ''}</div>
-          `;
-          document.body.appendChild(successMessage);
-          
-          setTimeout(() => {
-            document.body.removeChild(successMessage);
-            window.close();
-          }, 1500);
-        })
-        .catch(error => {
-          console.error('Error setting pomodoro:', error);
-          setSaveStatus('Error setting pomodoro');
-        });
-    }
-    setShowPomodoroPopup(false);
+    // Pomodoro functionality completely disabled
+    console.log('Pomodoro start functionality disabled');
   };
 
   const handlePomodoroCompleteStart5MinBreak = () => {
-    const breakDuration = Math.round(completedPomodoroDuration / 5) || 5;
-    browser.runtime.sendMessage({ 
-      type: 'START_BREAK', 
-      minutes: breakDuration 
-    });
-    window.close();
+    // Break functionality completely disabled
+    console.log('Pomodoro break functionality disabled');
   };
 
   const handlePomodoroCompleteStopAndReset = () => {
-    browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' });
-    window.close();
+    // Pomodoro stop and reset functionality completely disabled
+    console.log('Pomodoro stop and reset functionality disabled');
   };
 
   const handleAddSite = () => {
@@ -508,14 +485,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Check if this popup was opened for pomodoro completion
+    // Check if this popup was opened for pomodoro completion - DISABLED
     const urlParams = new URLSearchParams(window.location.search);
     const action = urlParams.get('action');
     const duration = urlParams.get('duration');
     
     if (action === 'pomodoro_complete' && duration) {
-      setCompletedPomodoroDuration(parseInt(duration));
-      setShowPomodoroCompletePopup(true);
+      // Pomodoro completion functionality completely disabled
+      console.log('Pomodoro completion popup blocked');
+      // Do not set completion popup to true
     }
   }, []);
 
@@ -852,8 +830,77 @@ export default function App() {
           </button>
         </div>
         <div className="button-group" style={{ marginTop: '10px' }}>
-          <button className="reset-button" onClick={handleReset}>
-            Set Pomodoro
+          <button 
+            className="smart-scroll-button"
+            onClick={handleSmartScrollToggle}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              background: isSmartScrollEnabled 
+                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
+                : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              boxShadow: isSmartScrollEnabled
+                ? '0 4px 14px 0 rgba(16, 185, 129, 0.3)'
+                : '0 4px 14px 0 rgba(239, 68, 68, 0.3)',
+              color: 'white'
+            }}
+          >
+            {/* Toggle Switch */}
+            <div style={{
+              position: 'relative',
+              display: 'inline-block',
+              width: '28px',
+              height: '14px',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={isSmartScrollEnabled}
+                onChange={() => {}}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span 
+                style={{
+                  position: 'absolute',
+                  cursor: 'pointer',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: isSmartScrollEnabled ? '#ffffff' : '#ffffff',
+                  borderRadius: '14px',
+                  transition: '.3s',
+                  opacity: 0.9
+                }}
+              >
+                <span 
+                  style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '10px',
+                    width: '10px',
+                    left: isSmartScrollEnabled ? '16px' : '2px',
+                    bottom: '2px',
+                    backgroundColor: isSmartScrollEnabled ? '#10b981' : '#ef4444',
+                    borderRadius: '50%',
+                    transition: '.3s'
+                  }}
+                />
+              </span>
+            </div>
+            {/* Text Label */}
+            <span style={{ 
+              fontSize: '12px', 
+              fontWeight: '600',
+              textAlign: 'center',
+              lineHeight: '1',
+              color: 'white'
+            }}>
+              Smart Scroll
+            </span>
           </button>
           <button className="save-button" onClick={handleSave}>
             Save Settings
@@ -862,101 +909,7 @@ export default function App() {
         <div className="status-message">{saveStatus}</div>
       </div>
 
-      {showPomodoroPopup && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(79, 70, 229, 0.15)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div 
-            style={{
-              background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
-              padding: '24px',
-              borderRadius: '16px',
-              width: '320px',
-              boxShadow: '0 20px 25px -5px rgba(79, 70, 229, 0.2), 0 10px 10px -5px rgba(79, 70, 229, 0.1)',
-              border: '1px solid var(--border-color)',
-              position: 'relative'
-            }}
-          >
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '3px',
-              background: 'linear-gradient(90deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%)',
-              borderRadius: '16px 16px 0 0'
-            }}></div>
-            <h3 style={{margin: '0 0 12px', color: 'var(--text-color)', fontSize: '18px', fontWeight: '700'}}>Set Pomodoro Timer</h3>
-            <p style={{margin: '0 0 18px', fontSize: '14px', color: 'var(--secondary-text)', lineHeight: '1.5'}}>
-              Set your focus time in minutes.
-            </p>
-            <input
-              type="number"
-              min="1"
-              value={pomodoroMinutes}
-              onChange={(e) => setPomodoroMinutes(e.target.value)}
-              placeholder="Enter minutes"
-              className="small-input"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                marginBottom: '20px',
-                borderRadius: '8px',
-                border: '2px solid var(--input-border)',
-                fontSize: '16px',
-                fontWeight: '600',
-                backgroundColor: 'var(--input-bg)',
-                color: 'var(--text-color)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-            />
-            <div style={{display: 'flex', justifyContent: 'space-between', gap: '12px'}}>
-              <button 
-                onClick={() => setShowPomodoroPopup(false)} 
-                className="reset-button"
-                style={{
-                  padding: '12px 16px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  flex: 1,
-                  fontSize: '14px',
-                  fontWeight: '600'
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handlePomodoroDone}
-                className="save-button"
-                style={{
-                  padding: '12px 16px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  flex: 1,
-                  fontSize: '14px',
-                  fontWeight: '600'
-                }}
-              >
-                Start
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Pomodoro popup overlay removed - button kept for UI consistency */}
 
       {showPomodoroCompletePopup && (
         <div 
