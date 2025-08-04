@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import Onboarding from './Onboarding';
 
 export default function App() {
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(true); // Set to true for testing
+  const [currentSlide, setCurrentSlide] = useState<number>(1);
+  
   const [maxScrolls, setMaxScrolls] = useState<number>(30);
   const [maxScrollsInput, setMaxScrollsInput] = useState<string>(() => maxScrolls.toString());
   const [currentScrolls, setCurrentScrolls] = useState<number>(0);
@@ -514,11 +519,41 @@ export default function App() {
     }
   }, []);
 
+  // Onboarding handlers
+  const handleOnboardingNext = () => {
+    setCurrentSlide(prev => prev + 1);
+  };
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    // TODO: Save onboarding completion status to storage
+  };
+
   if (isLoading) {
     return <div className="loading">Loading settings...</div>;
   }
+
+  // Show onboarding if needed
+  if (showOnboarding) {
+    return (
+      <Onboarding 
+        currentSlide={currentSlide}
+        onNext={handleOnboardingNext}
+        onComplete={handleOnboardingComplete}
+      />
+    );
+  }
+
   return (
     <div className="container breathing-background">
+      {/* Test button - remove in production */}
+      <button 
+        onClick={() => {setShowOnboarding(true); setCurrentSlide(1);}} 
+        style={{position: 'absolute', top: '5px', right: '5px', fontSize: '10px', padding: '2px 6px'}}
+      >
+        Test Onboarding
+      </button>
+      
       <header>
         <h1>NoMoScroll</h1>
         <p className="subtitle">Focus and control your browsing habits</p>
