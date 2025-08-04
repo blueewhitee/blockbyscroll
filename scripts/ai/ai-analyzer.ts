@@ -238,7 +238,7 @@ export class AIContentAnalyzer {
         return {
           newMaxScrolls: currentMaxScrolls + sessionBonusScrolls,
           shouldShowOverlay: true,
-          overlayMessage: `🎯 Deep Focus Detected! Keep learning! ${reasoning}`,
+          overlayMessage: `🎯 Deep Focus Detected! Added ${sessionBonusScrolls} bonus scrolls for your focused learning! ${reasoning}`,
           overlayType: 'encouragement',
           userPattern: user_pattern
         };

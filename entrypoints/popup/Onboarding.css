@@ -1,12 +1,10 @@
 /* Onboarding Styles */
 /* Using main app's .container class for consistent sizing */
 
-/* Make onboarding 2/3 size of actual extension */
+/* Match actual extension size - allow natural growth */
 .container.breathing-background {
-  width: 227px; /* 2/3 of 340px */
-  min-height: 213px; /* 2/3 of 320px */
-  padding: 13px; /* 2/3 of 20px */
-  height: auto; /* Allow natural expansion */
+  min-height: 320px; /* Same as main app minimum */
+  height: auto; /* Allow natural expansion like main app */
   display: flex;
   flex-direction: column;
 }
@@ -45,8 +43,8 @@
 }
 
 .onboarding-content {
-  margin-bottom: 11px; /* 2/3 of 16px */
-  margin-top: 11px; /* 2/3 of 16px */
+  margin-bottom: 32px; /* Restored proper spacing */
+  margin-top: 20px; /* Restored proper spacing */
   display: flex;
   flex-direction: column;
   flex: 1; /* Take available space like main app */
@@ -87,16 +85,27 @@
 /* Removed .slide-subtitle::after - no more decorative dash */
 
 .slide-image {
-  width: 180px; /* Reduced size to prevent scrolling */
+  width: 200px; /* Reduced size to fit better on screen */
   max-width: 100%;
-  height: auto;
-  max-height: 100px; /* Constrain height to fit screen */
+  height: auto; /* Natural height like extension content */
   object-fit: contain;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
   border-radius: 8px;
-  margin: 8px 0; /* Reduced margin */
-  /* Removed background padding/shadow/border */
+  margin: 12px 0; /* Proper spacing like extension */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+}
+
+.slide-image-large {
+  width: 300px; /* Larger size for 3rd slide */
+}
+
+.slide-image-no-padding {
+  margin: 0; /* Remove padding/margin for 1st slide */
+  box-shadow: none; /* Remove white box shadow */
+  border: none; /* Remove border that creates white box effect */
+  background: transparent; /* Ensure no background */
 }
 
 .slide-description {
@@ -117,7 +126,11 @@
   flex-direction: column;
   gap: 12px;
   align-items: center;
-  margin-top: 16px; /* Reduced to ensure button is visible */
+  margin-top: 32px; /* Restored proper spacing like extension */
+}
+
+.onboarding-actions.slide-2-actions {
+  margin-top: 8px; /* Further reduced margin for slide 2 to move button higher */
 }
 
 .onboarding-button {
