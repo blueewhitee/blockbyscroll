@@ -78,7 +78,7 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
                   checked={smartLimitsEnabled}
                   onChange={handleCheckboxChange}
                 />
-                <span className="checkmark"></span>
+                <span className={`custom-checkmark ${smartLimitsEnabled ? 'checked' : ''}`}></span>
                 <span className="checkbox-text">Enable Smart Limits</span>
               </label>
             </div>
@@ -87,7 +87,14 @@ export default function Onboarding({ currentSlide, onNext, onComplete }: Onboard
           {currentSlide === 3 && (
             <div className="ai-insights-description-container">
               <p className="ai-insights-description">
-                anonymously and without storing content to give you bonus scrolls when you're really engaged
+                <a 
+                  href="https://nomoscroll.vercel.app/privacy" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="highlight-text privacy-link"
+                >
+                  anonymously and without storing content
+                </a> <span className="remaining-text">to give you bonus scrolls when you're really engaged</span>
               </p>
             </div>
           )}

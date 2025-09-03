@@ -24,11 +24,9 @@ export default defineConfig({
     },
     // Explicitly defining your custom icons
     icons: {
-      "16": "icon/16.jpg",
-      "32": "icon/32.jpg",
-      "48": "icon/48.jpg",
-      "96": "icon/96.jpg",
-      "128": "icon/128.jpg"
+      "16": "16x16.png",
+      "48": "48x48.png", 
+      "128": "128x128.png"
     },
     },
 });

@@ -37,7 +37,9 @@ export default defineBackground(() => {
           autoPlayOnReveal: false,
           buttonText: 'View Video',
           buttonColor: '#1DA1F2'
-        }
+        },
+        isLockInMode: false,  // Lock In mode state
+        lockInActivatedTime: 0  // When Lock In was activated
       });
       console.log('ScrollStop: Default settings initialized');
     }
@@ -195,7 +197,7 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'GET_SETTINGS') {
-      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings', 'smartScrollEnabled', 'onboardingCompleted']).then(sendResponse);
+      browser.storage.sync.get(['maxScrolls', 'scrollCounts', 'distractingSites', 'resetInterval', 'lastResetTime', 'customLimits', 'youtubeSettings', 'instagramSettings', 'videoOverlaySettings', 'smartScrollEnabled', 'onboardingCompleted', 'isLockInMode', 'lockInActivatedTime']).then(sendResponse);
       return true; // Required for async response
     }
     
@@ -317,6 +319,33 @@ export default defineBackground(() => {
         sendResponse({ success: true });
       }).catch(error => {
         console.error('BACKGROUND: Error saving Smart Scroll state:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+      
+      return true; // Required for async response
+    }
+    
+    // Handle Lock In mode toggle
+    if (message.type === 'TOGGLE_LOCK_IN_MODE') {
+      console.log('BACKGROUND: Lock In mode toggled to:', message.enabled);
+      
+      // Store the Lock In state in browser storage
+      browser.storage.sync.set({ 
+        isLockInMode: message.enabled,
+        lockInActivatedTime: message.activatedTime || 0
+      }).then(() => {
+        console.log('BACKGROUND: Lock In state saved:', message.enabled);
+        
+        // Notify all content scripts about the Lock In state change
+        updateAllContentScripts({
+          type: 'LOCK_IN_STATE_CHANGED',
+          enabled: message.enabled,
+          activatedTime: message.activatedTime || 0
+        });
+        
+        sendResponse({ success: true });
+      }).catch(error => {
+        console.error('BACKGROUND: Error saving Lock In state:', error);
         sendResponse({ success: false, error: error.message });
       });
       

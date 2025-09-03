@@ -257,6 +257,41 @@ button:hover::before {
   box-shadow: 0 8px 25px 0 rgba(16, 185, 129, 0.4) !important;
 }
 
+/* Lock In Button Styles */
+.lock-in-button {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.3);
+}
+
+.lock-in-button:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(99, 102, 241, 0.4);
+}
+
+.lock-in-active-button {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.4);
+  animation: lockInPulse 2s ease-in-out infinite;
+}
+
+.lock-in-active-button:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(220, 38, 38, 0.5);
+}
+
+@keyframes lockInPulse {
+  0%, 100% {
+    box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.6), 0 0 20px rgba(220, 38, 38, 0.3);
+  }
+}
+
 .info-box {
   background: linear-gradient(145deg, #f8fafc 0%, var(--accent-light) 100%);
   border-radius: 12px;
@@ -651,4 +686,158 @@ input[type="number"] {
   .pattern-neutral { color: #94a3b8 !important; }
   .pattern-warning { color: #fb923c !important; }
   .pattern-alert { color: #f87171 !important; }
+}
+
+/* Help Button Styles */
+.help-button {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+  padding: 4px;
+}
+
+.help-button:hover {
+  color: #4338ca;
+  transform: scale(1.1);
+}
+
+/* Help Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(79, 70, 229, 0.15);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.help-modal {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  max-width: 350px;
+  width: 85%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 12px;
+  border-bottom: 2px solid var(--primary-color);
+}
+
+.help-modal-header h3 {
+  margin: 0;
+  color: var(--text-color);
+  font-size: 18px;
+  font-weight: 600;
+  margin-right: auto; /* Push title to the left, close button to the right */
+}
+
+.help-modal-close {
+  background: none !important;
+  border: none;
+  font-size: 18px;
+  color: var(--secondary-text) !important;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 0;
+  transition: none !important;
+  flex-shrink: 0;
+  min-width: auto;
+  transform: none !important;
+  box-shadow: none !important;
+  margin-left: 80px;
+}
+
+.help-modal-close:hover {
+  background: none !important;
+  color: var(--secondary-text) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.help-modal-close::before {
+  display: none !important;
+}
+
+.help-modal-content {
+  padding: 12px 20px 20px;
+  max-height: calc(80vh - 100px);
+  overflow-y: auto;
+}
+
+.help-feature {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(248, 250, 255, 0.8) 100%);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.help-feature:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
+  border-color: var(--primary-color);
+}
+
+.help-feature:last-child {
+  margin-bottom: 0;
+}
+
+.help-feature-text {
+  flex: 1;
+}
+
+.help-feature-text strong {
+  display: block;
+  color: var(--text-color);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.help-feature-text p {
+  margin: 0;
+  color: var(--secondary-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

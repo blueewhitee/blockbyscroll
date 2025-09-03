@@ -44,9 +44,17 @@ export default function App() {
   const [pomodoroMinutes, setPomodoroMinutes] = useState<string>("25");
   const [showPomodoroCompletePopup, setShowPomodoroCompletePopup] = useState<boolean>(false);
   const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState<number>(25);
+  const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
   
   // Smart Scroll toggle state
   const [isSmartScrollEnabled, setIsSmartScrollEnabled] = useState<boolean>(true);
+  
+  // Lock In mode state
+  const [isLockInMode, setIsLockInMode] = useState<boolean>(false);
+  const [lockInActivatedTime, setLockInActivatedTime] = useState<number>(0);
+  
+  // Debouncing state for auto-save
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   
   // Behavior insights state
   const [currentPattern, setCurrentPattern] = useState<string>('Casual Browsing/Catch-up');
@@ -120,6 +128,12 @@ export default function App() {
         const smartScrollEnabled = settings.smartScrollEnabled !== undefined ? settings.smartScrollEnabled : true;
         setIsSmartScrollEnabled(smartScrollEnabled);
         
+        // Load Lock In mode state from settings
+        const lockInMode = settings.isLockInMode === true; // Explicitly check for true
+        const lockInTime = settings.lockInActivatedTime || 0;
+        setIsLockInMode(lockInMode);
+        setLockInActivatedTime(lockInTime);
+        
         // Check if onboarding has been completed (first-time users will see onboarding)
         const onboardingCompleted = settings.onboardingCompleted === true; // Explicitly check for true
         setShowOnboarding(!onboardingCompleted);
@@ -158,6 +172,36 @@ export default function App() {
     }
   }, [maxScrolls]);
 
+  // Auto-save when maxScrolls changes (after initial load)
+  useEffect(() => {
+    if (!isLoading && maxScrolls > 0) {
+      autoSaveSettings();
+    }
+  }, [maxScrolls]);
+
+  // Auto-save when resetInterval changes (after initial load)
+  useEffect(() => {
+    if (!isLoading) {
+      autoSaveSettings();
+    }
+  }, [resetInterval]);
+
+  // Auto-save when videoOverlaySettings change (after initial load)
+  useEffect(() => {
+    if (!isLoading) {
+      autoSaveSettings();
+    }
+  }, [videoOverlaySettings]);
+
+  // Cleanup timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+    };
+  }, [saveTimeout]);
+
   const handleMaxScrollsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMaxScrollsInput(e.target.value);
   };
@@ -168,6 +212,7 @@ export default function App() {
       num = 30;
     }
     setMaxScrolls(num);
+    // Auto-save will be triggered by the useEffect above
   };
 
   const handleEditSite = (site: string) => {
@@ -179,15 +224,63 @@ export default function App() {
     setCustomLimitInput(e.target.value);
   };
   const handleYoutubeSettingToggle = (setting: 'hideShorts' | 'hideHomeFeed') => {
-    setYoutubeSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
+    const newSettings = {
+      ...youtubeSettings,
+      [setting]: !youtubeSettings[setting]
+    };
+    
+    setYoutubeSettings(newSettings);
+    
+    // Auto-save the settings
+    setSaveStatus('Saving...');
+    browser.runtime.sendMessage({
+      type: 'SAVE_SETTINGS',
+      maxScrolls,
+      distractingSites,
+      resetInterval,
+      customLimits,
+      youtubeSettings: newSettings,
+      instagramSettings,
+      videoOverlaySettings
+    })
+    .then(() => {
+      setSaveStatus('Saved!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    })
+    .catch(error => {
+      console.error('Error saving YouTube settings:', error);
+      setSaveStatus('Error saving');
+      setTimeout(() => setSaveStatus(''), 2000);
+    });
   };  const handleInstagramSettingToggle = (setting: 'hideReels') => {
-    setInstagramSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
+    const newSettings = {
+      ...instagramSettings,
+      [setting]: !instagramSettings[setting]
+    };
+    
+    setInstagramSettings(newSettings);
+    
+    // Auto-save the settings
+    setSaveStatus('Saving...');
+    browser.runtime.sendMessage({
+      type: 'SAVE_SETTINGS',
+      maxScrolls,
+      distractingSites,
+      resetInterval,
+      customLimits,
+      youtubeSettings,
+      instagramSettings: newSettings,
+      videoOverlaySettings
+    })
+    .then(() => {
+      setSaveStatus('Saved!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    })
+    .catch(error => {
+      console.error('Error saving Instagram settings:', error);
+      setSaveStatus('Error saving');
+      setTimeout(() => setSaveStatus(''), 2000);
+    });
   };
 
   const handleVideoOverlaySettingToggle = (setting: 'enabled' | 'autoPlayOnReveal') => {
@@ -195,6 +288,7 @@ export default function App() {
       ...prev,
       [setting]: !prev[setting]
     }));
+    // Auto-save will be triggered by the useEffect below
   };
 
   const handleVideoOverlaySettingChange = (setting: 'opacity' | 'buttonText' | 'buttonColor', value: number | string) => {
@@ -202,6 +296,7 @@ export default function App() {
       ...prev,
       [setting]: value
     }));
+    // Auto-save will be triggered by the useEffect below
   };
 
   const saveCustomLimit = () => {
@@ -246,33 +341,79 @@ export default function App() {
     setEditingSite(null);
   };
 
-  const handleSave = () => {
-    setSaveStatus('Saving...');
-    let currentNumVal = parseInt(maxScrollsInput);
-    if (isNaN(currentNumVal) || currentNumVal < 1) {
-        currentNumVal = 30;
+  // Centralized auto-save function with debouncing - replaces manual save button functionality
+  const autoSaveSettings = (customMaxScrolls?: number, immediate = false) => {
+    // Clear existing timeout if any
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      setSaveTimeout(null);
     }
-    setMaxScrolls(currentNumVal);
 
-    const scrollsToSave = currentNumVal;
+    const performSave = () => {
+      setSaveStatus('Auto-saving...');
+      
+      // Use provided maxScrolls or current state
+      const scrollsToSave = customMaxScrolls !== undefined ? customMaxScrolls : maxScrolls;
 
-    browser.runtime.sendMessage({      type: 'SAVE_SETTINGS',
-      maxScrolls: scrollsToSave,
-      distractingSites,
-      resetInterval,
-      customLimits,
-      youtubeSettings,
-      instagramSettings,
-      videoOverlaySettings
-    })
-      .then(() => {
-        setSaveStatus('Saved!');
-        setTimeout(() => setSaveStatus(''), 2000);
+      browser.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        maxScrolls: scrollsToSave,
+        distractingSites,
+        resetInterval,
+        customLimits,
+        youtubeSettings,
+        instagramSettings,
+        videoOverlaySettings
       })
-      .catch(error => {
-        console.error('Error saving settings:', error);
-        setSaveStatus('Error saving');
-      });
+        .then(() => {
+          setSaveStatus('Settings saved');
+          setTimeout(() => setSaveStatus(''), 1500);
+        })
+        .catch(error => {
+          console.error('Error auto-saving settings:', error);
+          setSaveStatus('Auto-save failed');
+          setTimeout(() => setSaveStatus(''), 2000);
+        });
+    };
+
+    if (immediate) {
+      // Save immediately for critical changes
+      performSave();
+    } else {
+      // Debounce for rapid changes (500ms delay)
+      const timeout = setTimeout(performSave, 500);
+      setSaveTimeout(timeout);
+    }
+  };
+
+  // Keep Save Settings button for different feature - now works alongside auto-save
+  // Lock In mode toggle handler
+  const handleLockInToggle = () => {
+    const newLockInState = !isLockInMode;
+    const currentTime = Date.now();
+    
+    setIsLockInMode(newLockInState);
+    setLockInActivatedTime(newLockInState ? currentTime : 0);
+    
+    // Update status message
+    setSaveStatus(newLockInState ? 'Lock In activated!' : 'Lock In deactivated!');
+    setTimeout(() => setSaveStatus(''), 2000);
+    
+    // Send message to background script to handle Lock In toggle
+    browser.runtime.sendMessage({
+      type: 'TOGGLE_LOCK_IN_MODE',
+      enabled: newLockInState,
+      activatedTime: newLockInState ? currentTime : 0
+    }).then(() => {
+      console.log('Lock In mode toggled:', newLockInState);
+    }).catch(error => {
+      console.error('Error toggling Lock In mode:', error);
+      // Revert state on error
+      setIsLockInMode(!newLockInState);
+      setLockInActivatedTime(0);
+      setSaveStatus('Error toggling Lock In');
+      setTimeout(() => setSaveStatus(''), 2000);
+    });
   };
 
   const handleSmartScrollToggle = () => {
@@ -388,6 +529,7 @@ export default function App() {
 
   const handleResetIntervalChange = (value: number) => {
     setResetInterval(value);
+    // Auto-save will be triggered by the useEffect below
   };
 
   const getFaviconUrl = (domain: string) => {
@@ -545,12 +687,13 @@ export default function App() {
 
   return (
     <div className="container breathing-background">
-      {/* Test button - remove in production */}
+      {/* Help button */}
       <button 
-        onClick={() => {setShowOnboarding(true); setCurrentSlide(1);}} 
-        style={{position: 'absolute', top: '5px', right: '5px', fontSize: '10px', padding: '2px 6px'}}
+        onClick={() => setShowHelpModal(true)} 
+        className="help-button"
+        title="Help & Features"
       >
-        Test Onboarding
+        ?
       </button>
       
       <header>
@@ -923,8 +1066,12 @@ export default function App() {
               Smart Scroll
             </span>
           </button>
-          <button className="save-button" onClick={handleSave}>
-            Save Settings
+          <button 
+            className={isLockInMode ? "lock-in-active-button" : "lock-in-button"} 
+            onClick={handleLockInToggle}
+            title={isLockInMode ? "Click to exit Lock In mode" : "Click to activate Lock In mode - blocks all distraction sites"}
+          >
+            {isLockInMode ? "🔓 Exit Lock In" : "🔒 Lock In"}
           </button>
         </div>
         <div className="status-message">{saveStatus}</div>
@@ -1378,6 +1525,87 @@ export default function App() {
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div 
+          className="modal-overlay"
+          onClick={() => setShowHelpModal(false)}
+        >
+          <div 
+            className="help-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="help-modal-header">
+              <h3>Features & Help</h3>
+              <button 
+                className="help-modal-close"
+                onClick={() => setShowHelpModal(false)}
+              >
+                X
+              </button>
+            </div>
+            
+            <div className="help-modal-content">
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Global Scroll Limit</strong>
+                  <p>Set a maximum number of scrolls across all tracked websites</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Smart Scroll</strong>
+                  <p>Intelligently grants extra scrolls when you're near your limit but engaging with valuable content</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Custom Site Limits</strong>
+                  <p>Set individual scroll limits for specific websites by clicking site icons</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Site Blocking</strong>
+                  <p>Add websites to your distraction list to track and limit scrolling</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>YouTube Controls</strong>
+                  <p>Hide Shorts, Home Feed, and add video overlays for focused viewing</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Instagram Controls</strong>
+                  <p>Block Reels to reduce mindless scrolling and improve focus</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Auto-Reset</strong>
+                  <p>Automatically reset scroll counts after a specified time period</p>
+                </div>
+              </div>
+              
+              <div className="help-feature">
+                <div className="help-feature-text">
+                  <strong>Progress Tracking</strong>
+                  <p>Visual progress bars and detailed scroll statistics for all your sites</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

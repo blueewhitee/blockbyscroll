@@ -440,6 +440,8 @@ export default defineContentScript({
     let scrollCount = 0;
     let maxScrolls = 30; // Default value to 30
     let isBlocked = false;
+    let isLockInMode = false; // Lock In mode state
+    let lockInActivatedTime = 0; // When Lock In was activated
     let distractingSites = ['youtube.com', 'x.com', 'reddit.com','instagram.com','facebook.com']; // Default sites
     let resetInterval = 0; // Default: no auto reset
     let lastResetTime = Date.now();
@@ -486,14 +488,6 @@ export default defineContentScript({
     let instagramSettings = {
       hideReels: false
     };
-    // Pomodoro settings
-    let isPomodoroActive = false;
-    let pomodoroRemainingMinutes = 0;
-    let pomodoroRemainingSeconds = 0;
-    let pomodoroDuration = 0;
-    let pomodoroEndTime = 0;
-    let pomodoroUpdateInterval: ReturnType<typeof globalThis.setInterval> | null = null;
-    let pomodoroOverlay: HTMLElement;
 
     function checkIfPdf(): boolean {
       const isPdf = (
@@ -585,6 +579,74 @@ export default defineContentScript({
     overlay.appendChild(overlayHint);
     overlay.appendChild(overlayTimer);
     
+    // Create Lock In mode overlay
+    const lockInOverlay = document.createElement('div');
+    lockInOverlay.id = 'lock-in-overlay';
+    lockInOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(20, 20, 20, 0.98);
+      color: white;
+      display: none;
+      z-index: 2147483647; /* Maximum z-index value */
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: auto !important;
+      touch-action: none;
+    `;
+    
+    // Add Lock In elements to the overlay
+    const lockInIcon = document.createElement('div');
+    lockInIcon.innerHTML = '🔒';
+    lockInIcon.style.cssText = `
+      font-size: 80px;
+      margin-bottom: 30px;
+    `;
+    
+    const lockInTitle = document.createElement('h2');
+    lockInTitle.textContent = 'You are in Lock In mode';
+    lockInTitle.style.cssText = `
+      font-size: 32px;
+      margin: 0 0 20px 0;
+      color: #fff;
+      font-weight: 700;
+    `;
+    
+    const lockInMessage = document.createElement('p');
+    lockInMessage.textContent = 'All distraction sites are blocked while Lock In mode is active.';
+    lockInMessage.style.cssText = `
+      font-size: 20px;
+      max-width: 600px;
+      margin: 0 0 15px 0;
+      color: #eee;
+      line-height: 1.4;
+    `;
+    
+    const lockInHint = document.createElement('p');
+    lockInHint.textContent = 'Click the Lock In button in the extension popup to exit this mode.';
+    lockInHint.style.cssText = `
+      font-size: 16px;
+      max-width: 500px;
+      margin: 20px 0 0 0;
+      color: #bbb;
+      font-style: italic;
+    `;
+    
+    // Append all elements to the Lock In overlay
+    lockInOverlay.appendChild(lockInIcon);
+    lockInOverlay.appendChild(lockInTitle);
+    lockInOverlay.appendChild(lockInMessage);
+    lockInOverlay.appendChild(lockInHint);
+    
     // Create pending analysis overlay
     const pendingOverlay = document.createElement('div');
     pendingOverlay.id = 'pending-analysis-overlay';
@@ -657,287 +719,8 @@ export default defineContentScript({
     browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.log('CONTENT SCRIPT: Received message:', JSON.stringify(message));
 
-      // Helper function to remove the completion modal
-      const removeCompletionModal = () => {
-        const existingModal = document.getElementById('pomodoro-completion-modal-unique');
-        if (existingModal) {
-          try {
-            existingModal.remove();
-            console.log('CONTENT SCRIPT: Removed pomodoro completion modal.');
-          } catch (e) {
-            console.error('CONTENT SCRIPT: Error removing existing modal:', e);
-          }
-        }
-        const breakOverModal = document.getElementById('pomodoro-break-over-modal-unique');
-        if (breakOverModal) {
-          try {
-            breakOverModal.remove();
-            console.log('CONTENT SCRIPT: Removed break over modal.');
-          } catch (e) {
-            console.error('CONTENT SCRIPT: Error removing break over modal:', e);
-          }
-        }
-      };
       
-      if (message.type === 'POMODORO_UPDATE') {
-        removeCompletionModal(); // Remove modal before processing update
-        console.log('CONTENT SCRIPT: POMODORO_UPDATE received. isActive:', message.isActive, 'Force display:', message.forceDisplay);
-        if (message.isActive) {
-          isPomodoroActive = true;
-          pomodoroRemainingMinutes = message.remaining.minutes;
-          pomodoroRemainingSeconds = message.remaining.seconds;
-          pomodoroDuration = message.duration;
-          const remainingMs = (message.remaining.minutes * 60 + message.remaining.seconds) * 1000;
-          pomodoroEndTime = Date.now() + remainingMs;
-          
-          await createPomodoroOverlay(); // Await creation and DOM insertion
-          
-          updatePomodoroDisplay(message.remaining.minutes, message.remaining.seconds, message.duration, message.isBreak);
-          
-          if (message.forceDisplay || isPomodoroActive) {
-            console.log('CONTENT SCRIPT: Attempting to show pomodoro overlay via POMODORO_UPDATE. Overlay object:', pomodoroOverlay, 'isPomodoroActive:', isPomodoroActive, 'forceDisplay:', message.forceDisplay);
-            if (pomodoroOverlay) {
-              pomodoroOverlay.style.setProperty('display', 'block', 'important'); // Ensure display:block overrides other styles
-              console.log('CONTENT SCRIPT: Set pomodoro overlay display to block via POMODORO_UPDATE. Current display style:', pomodoroOverlay.style.display);
-            } else {
-              console.error('CONTENT SCRIPT: pomodoroOverlay is null or undefined when trying to show it in POMODORO_UPDATE.');
-            }
-          }
-          
-          if (pomodoroOverlay) {
-            if (message.isBreak) {
-              console.log('CONTENT SCRIPT: Setting break styling.');
-              pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
-              const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-              if (iconElement) iconElement.textContent = '☕';
-            } else {
-              console.log('CONTENT SCRIPT: Setting regular pomodoro styling.');
-              pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
-              const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-              if (iconElement) iconElement.textContent = '🍅';
-            }
-          }
-          startLocalPomodoroUpdate();
-        } else {
-          console.log('CONTENT SCRIPT: POMODORO_UPDATE received: inactive.');
-          isPomodoroActive = false;
-          if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
-          stopLocalPomodoroUpdate();
-        }
-      } else if (message.type === 'POMODORO_COMPLETE_PROMPT') {
-        console.log('CONTENT SCRIPT: POMODORO_COMPLETE_PROMPT received. Duration:', message.duration);
-        
-        // Always hide the timer overlay when showing the completion modal
-        if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
-        stopLocalPomodoroUpdate();
-        
-        // Ensure we handle the message even if not focused by forcing the modal to appear
-        setTimeout(() => { 
-          // Add a small delay to ensure DOM is ready
-          const duration = message.duration || 25;
-          const breakDuration = Math.round(duration / 5) || 5;
-          const modalId = 'pomodoro-completion-modal-unique';
-          
-          // First check if a modal already exists and remove it to avoid conflicts
-          let existingModal = document.getElementById(modalId);
-          if (existingModal) {
-            try {
-              existingModal.remove();
-            } catch (e) {
-              console.error('CONTENT SCRIPT: Error removing existing modal:', e);
-            }
-          }
-          
-          // Simplified modal creation with minimal DOM operations
-          const modalOverlay = document.createElement('div');
-          modalOverlay.id = modalId;
-          modalOverlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.75); display: flex; align-items: center;
-            justify-content: center; z-index: 2147483647;
-          `;
-          
-          // Create a single HTML string to minimize DOM operations
-          modalOverlay.innerHTML = `
-            <div style="background-color: white; padding: 28px; border-radius: 14px;
-              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); max-width: 460px; text-align: center;
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-              
-              <div style="font-size: 54px; margin-bottom: 20px; color: #4caf50;">🎉</div>
-              <h2 style="margin-top: 0; color: #333; font-size: 24px; font-weight: 600;">Pomodoro Complete!</h2>
-              <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 12px 0;">
-                Your ${duration} minute pomodoro session is complete. Great work!
-              </p>
-              <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
-                Would you like to take a ${breakDuration} minute break or stop the timer and reset your scrolls?
-              </p>
-              <div style="display: flex; justify-content: space-around; gap: 15px; margin-top: 25px;">
-                <button id="pomodoro-stop-btn-modal" style="flex: 1; padding: 14px 20px; background-color: #f44336; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Stop & Reset</button>
-                <button id="pomodoro-break-btn-modal" style="flex: 1; padding: 14px 20px; background-color: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.2s; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">Start Break (${breakDuration}m)</button>
-              </div>
-            </div>
-          `;
-          
-          // Add to DOM
-          const isPdfPageForModal = checkIfPdf();
-          const parentElement = isPdfPageForModal ? document.documentElement : document.body;
-
-          if (parentElement) {
-            parentElement.appendChild(modalOverlay);
-            console.log(`CONTENT SCRIPT: Pomodoro completion modal added to ${isPdfPageForModal ? 'document.documentElement' : 'document.body'}.`);
-          } else {
-            console.error(`CONTENT SCRIPT: Could not find parentElement for completion modal. PDF: ${isPdfPageForModal}. Appending to body as fallback.`);
-            document.body.appendChild(modalOverlay); // Fallback
-          }
-          
-          // Simplified button handlers with minimal event listeners
-          const stopBtn = document.getElementById('pomodoro-stop-btn-modal');
-          const breakBtn = document.getElementById('pomodoro-break-btn-modal');
-            if (stopBtn) {
-            stopBtn.onclick = () => {
-              console.log('CONTENT SCRIPT: Stop button clicked');
-              modalOverlay.remove(); // Remove the modal completely
-              
-              browser.runtime.sendMessage({ type: 'STOP_POMODORO_AND_RESET' })
-                .then(() => {
-                  isPomodoroActive = false;
-                })
-                .catch(err => {
-                  console.error('CONTENT SCRIPT: Error sending stop message:', err);
-                  isPomodoroActive = false;
-                });
-            };
-          }
-          
-          if (breakBtn) {
-            breakBtn.onclick = () => {
-              console.log('CONTENT SCRIPT: Break button clicked');
-              modalOverlay.remove(); // Remove the modal completely
-              
-              browser.runtime.sendMessage({ type: 'START_BREAK', minutes: breakDuration })
-                .catch(err => console.error('CONTENT SCRIPT: Error sending break message:', err));
-            };
-          }
-        }, 100); // Correctly close setTimeout and add delay
-      } else if (message.type === 'BREAK_COMPLETE') {
-        removeCompletionModal(); // Remove modal before processing update
-        // Reset the pomodoro UI when break is complete
-        isPomodoroActive = false;
-        if (pomodoroOverlay) {
-          pomodoroOverlay.style.display = 'none';
-        }
-        stopLocalPomodoroUpdate();
-        
-        // Notify the user that break is complete
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          background-color: rgba(33, 150, 243, 0.9);
-          color: white;
-          padding: 12px 20px;
-          border-radius: 8px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          font-weight: bold;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-          z-index: 2147483647;
-          animation: fadeIn 0.5s, fadeOut 0.5s 4.5s;
-        `;
-        
-        notification.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="font-size: 20px;">☕</div>
-            <div>Break complete! Ready to focus again?</div>
-          </div>
-        `;
-        
-        // Add animation keyframes
-        const style = document.createElement('style');
-        style.innerHTML = `
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes fadeOut {
-            from { opacity: 1; transform: translateY(0); }
-            to { opacity: 0; transform: translateY(20px); }
-          }
-        `;
-        document.head.appendChild(style);
-        
-        document.body.appendChild(notification);
-        
-        // Remove notification after 5 seconds
-        setTimeout(() => {
-          if (document.body.contains(notification)) {
-            document.body.removeChild(notification);
-          }
-        }, 5000);
-        
-        // Reset the scroll count if we're on a distracting site
-        if (isDistractingSite()) {
-          scrollCount = 0;
-          lastResetTime = message.lastResetTime;
-          updateCounter();
-          setScrollBlocking(false);
-        }      } else if (message.type === 'BREAK_COMPLETE_NOTIFICATION') {
-        // We'll just show a notification that break is complete and the next Pomodoro started
-        // No modal is needed as the Pomodoro automatically restarts now
-        console.log('CONTENT SCRIPT: BREAK_COMPLETE_NOTIFICATION received');
-        removeCompletionModal(); // Clear any other modals
-        
-        // Notify the user that break is complete and new Pomodoro started
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          background-color: rgba(76, 175, 80, 0.9); 
-          color: white;
-          padding: 12px 20px;
-          border-radius: 8px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          font-weight: bold;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-          z-index: 2147483647;
-          animation: fadeIn 0.5s, fadeOut 0.5s 4.5s;
-        `;
-        
-        const lastWorkDuration = message.lastPomodoroWorkDuration || 25;
-        
-        notification.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="font-size: 20px;">🍅</div>
-            <div>Break complete! New ${lastWorkDuration} min Pomodoro started.</div>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Remove notification after 5 seconds
-        setTimeout(() => {
-          if (document.body.contains(notification)) {
-            document.body.removeChild(notification);
-          }
-        }, 5000);
-      } else if (message.type === 'POMODORO_STOPPED_AND_RESET') {
-        removeCompletionModal(); // Remove modal before processing update
-        // Reset pomodoro UI
-        isPomodoroActive = false;
-        if (pomodoroOverlay) {
-          pomodoroOverlay.style.display = 'none';
-        }
-        stopLocalPomodoroUpdate();
-        
-        // Reset scroll count
-        if (isDistractingSite()) {
-          scrollCount = 0;
-          lastResetTime = message.lastResetTime;
-          updateCounter();
-          setScrollBlocking(false);
-        }
-      } else if (message.type === 'RESET_COUNTER') {
+      if (message.type === 'RESET_COUNTER') {
         scrollCount = 0;
         lastResetTime = message.lastResetTime;
         updateCounter();
@@ -1005,260 +788,25 @@ export default defineContentScript({
         } else {
           stopTimerUpdates();
         }
+      } else if (message.type === 'LOCK_IN_STATE_CHANGED') {
+        // Update Lock In mode state
+        isLockInMode = message.enabled;
+        lockInActivatedTime = message.activatedTime || 0;
+        
+        console.log(`Lock In mode ${message.enabled ? 'activated' : 'deactivated'} for ${currentHost}`);
+        
+        // Apply or remove Lock In blocking
+        if (isDistractingSite()) {
+          setLockInBlocking(message.enabled);
+        }
       }
       
       // Return true for async message handling
       return true;
     });
     
-    // Check pomodoro status from background script
-    function checkPomodoroStatus() {
-      console.log('Checking pomodoro status...');
-      browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-        .then(async status => {
-          console.log('Got pomodoro status:', status);
-          if (status && status.isActive) {
-            isPomodoroActive = true;
-            pomodoroRemainingMinutes = status.remaining.minutes;
-            pomodoroRemainingSeconds = status.remaining.seconds;
-            pomodoroDuration = status.duration;
-            
-            const remainingMs = (status.remaining.minutes * 60 + status.remaining.seconds) * 1000;
-            pomodoroEndTime = Date.now() + remainingMs;
-            
-            await createPomodoroOverlay(); // Ensure overlay is ready
-
-            updatePomodoroDisplay(status.remaining.minutes, status.remaining.seconds, status.duration, status.isBreak);
-            console.log('CONTENT SCRIPT: Attempting to show pomodoro overlay from checkPomodoroStatus. Overlay object:', pomodoroOverlay, 'Status isActive:', status.isActive);
-            if (pomodoroOverlay) {
-              pomodoroOverlay.style.setProperty('display', 'block', 'important'); // Ensure display:block overrides other styles
-              console.log('CONTENT SCRIPT: Set pomodoro overlay display to block from checkPomodoroStatus. Current display style:', pomodoroOverlay.style.display);
-            } else {
-              console.error('CONTENT SCRIPT: pomodoroOverlay is null or undefined when trying to show it in checkPomodoroStatus.');
-            }
-            
-            if (status.isBreak && pomodoroOverlay) {
-              console.log('CONTENT SCRIPT: Setting break styling on refresh.');
-              pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
-              const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-              if (iconElement) iconElement.textContent = '☕';
-            }
-            
-            startLocalPomodoroUpdate();
-          } else {
-            isPomodoroActive = false;
-            if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
-            stopLocalPomodoroUpdate();
-          }
-        })
-        .catch(err => {
-          console.error('Error checking pomodoro status:', err);
-        });
-    }
-    
-    // Create pomodoro timer overlay
-    function createPomodoroOverlay(): Promise<void> {
-      return new Promise((resolve) => {
-        if (pomodoroOverlay && (document.body.contains(pomodoroOverlay) || (document.documentElement && document.documentElement.contains(pomodoroOverlay)))) {
-          console.log('CONTENT SCRIPT: Pomodoro overlay already exists in DOM.');
-          resolve();
-          return;
-        }
-
-        if (pomodoroOverlay) { // Exists but not in DOM (detached)
-          try {
-            pomodoroOverlay.remove();
-            console.log('CONTENT SCRIPT: Removed detached pomodoroOverlay before recreating.');
-          } catch (e) {
-            console.error('CONTENT SCRIPT: Error removing detached pomodoroOverlay:', e);
-          }
-        }
-        
-        console.log('CONTENT SCRIPT: Creating new pomodoro overlay element.');
-        pomodoroOverlay = document.createElement('div');
-        pomodoroOverlay.id = 'pomodoro-timer-overlay';
-        // Base CSS - will be customized below
-        let cssText = `
-          position: fixed;
-          background-color: rgba(76, 175, 80, 0.85);
-          color: white;
-          padding: 6px 10px;
-          border-radius: 20px;
-          font-weight: bold;
-          z-index: 2147483647 !important; /* Maximum z-index to ensure visibility, added !important */
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          display: none; /* Start hidden, will be shown by handler */
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-          backdrop-filter: blur(2px);
-          -webkit-backdrop-filter: blur(2px);
-          cursor: pointer;
-          transition: all 0.2s ease;
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          font-size: 12px;
-        `;
-        pomodoroOverlay.style.cssText = cssText; // Apply the base CSS string
-        
-        // Detect PDF files - both local files and web-served PDFs
-        const isPdfFile = checkIfPdf();
-        // The detailed log is now in checkIfPdf, so this one can be simpler or removed.
-        console.log(`CONTENT SCRIPT: createPomodoroOverlay: isPdfFile = ${isPdfFile}`);
-
-        if (isPdfFile) {
-          pomodoroOverlay.style.setProperty('position', 'fixed', 'important');
-          pomodoroOverlay.style.setProperty('bottom', '20px', 'important');
-          pomodoroOverlay.style.setProperty('right', '20px', 'important');
-          pomodoroOverlay.style.setProperty('top', 'unset', 'important');
-          pomodoroOverlay.style.setProperty('left', 'unset', 'important');
-          console.log('CONTENT SCRIPT: Applied PDF positioning styles with !important.');
-        } else {
-          pomodoroOverlay.style.top = '20px';
-          pomodoroOverlay.style.right = '20px';
-          pomodoroOverlay.style.bottom = 'unset';
-          pomodoroOverlay.style.left = 'unset';
-          console.log('CONTENT SCRIPT: Applied non-PDF positioning styles.');
-        }
-        // Opacity and animation will be handled when shown
-        
-        let pomodoroStyle = document.getElementById('pomodoro-animation-style');
-        if (!pomodoroStyle) {
-          pomodoroStyle = document.createElement('style');
-          pomodoroStyle.id = 'pomodoro-animation-style';
-          pomodoroStyle.innerHTML = `
-            @keyframes pomodoroFadeInUp {
-              0% { opacity: 0; transform: translateY(10px); }
-              100% { opacity: 1; transform: translateY(0); }
-            }
-            @keyframes pomodoroFadeInDown {
-              0% { opacity: 0; transform: translateY(-10px); }
-              100% { opacity: 1; transform: translateY(0); }
-            }
-          `;
-          document.head.appendChild(pomodoroStyle);
-        }
-        
-        pomodoroOverlay.innerHTML = `
-          <div style="display: flex; align-items: center;">
-            <div class="pomodoro-icon" style="margin-right: 5px; font-size: 14px;">🍅</div>
-            <div id="pomodoro-time" style="font-size: 12px; font-weight: bold;">00:00/00:00</div>
-            <div style="margin-left: 5px; font-size: 10px; opacity: 0.8;">✕</div>
-          </div>
-        `;
-        
-        pomodoroOverlay.addEventListener('click', () => {
-          if (confirm('Stop pomodoro timer?')) {
-            stopLocalPomodoroUpdate();
-            if (pomodoroOverlay) pomodoroOverlay.style.display = 'none';
-            browser.runtime.sendMessage({ type: 'STOP_POMODORO' })
-              .catch(err => console.error('Error stopping pomodoro:', err));
-            isPomodoroActive = false;
-          }
-        });
-        
-        pomodoroOverlay.addEventListener('mouseenter', () => {
-          browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-            .then(status => {
-              if (status && status.isActive) {
-                pomodoroOverlay.style.backgroundColor = status.isBreak ? 'rgba(33, 150, 243, 1)' : 'rgba(76, 175, 80, 1)';
-              } else {
-                pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)';
-              }
-            })
-            .catch(() => { pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 1)'; });
-          pomodoroOverlay.style.transform = 'scale(1.05)';
-        });
-        
-        pomodoroOverlay.addEventListener('mouseleave', () => {
-          browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-            .then(status => {
-              if (status && status.isActive) {
-                pomodoroOverlay.style.backgroundColor = status.isBreak ? 'rgba(33, 150, 243, 0.85)' : 'rgba(76, 175, 80, 0.85)';
-              } else {
-                 pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
-              }
-            })
-            .catch(() => { pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)'; });
-          pomodoroOverlay.style.transform = 'scale(1)';
-        });
-
-        const parentElement = isPdfFile ? document.documentElement : document.body;
-
-        const tryAppendAndResolve = () => {
-          if (parentElement) {
-            if (!parentElement.contains(pomodoroOverlay)) {
-              parentElement.appendChild(pomodoroOverlay);
-              console.log(`CONTENT SCRIPT: Pomodoro overlay appended to ${isPdfFile ? 'document.documentElement' : 'document.body'}.`);
-            }
-            // Apply animation when it's about to be shown
-            if (isPdfFile) {
-                pomodoroOverlay.style.animation = 'pomodoroFadeInUp 0.3s ease-out';
-                console.log('CONTENT SCRIPT: Applying PDF animation (FadeInUp).');
-            } else {
-                pomodoroOverlay.style.animation = 'pomodoroFadeInDown 0.3s ease-out';
-                console.log('CONTENT SCRIPT: Applying non-PDF animation (FadeInDown).');
-            }
-            pomodoroOverlay.style.opacity = '1'; // Ensure opacity is set
-            resolve();
-          } else {
-            console.log(`CONTENT SCRIPT: ${isPdfFile ? 'document.documentElement' : 'document.body'} not ready, retrying append Pomodoro overlay.`);
-            setTimeout(tryAppendAndResolve, 100);
-          }
-        };
-        tryAppendAndResolve();
-      });
-    }
-    
-    // Initialize pomodoro immediately
-    async function initializePomodoroFeatures() {
-      console.log('Initializing pomodoro features...');
-      await createPomodoroOverlay(); // Await creation
-      console.log('CONTENT SCRIPT: Pomodoro overlay ensured by initializePomodoroFeatures.');
-      
-      setTimeout(() => {
-        checkPomodoroStatus();
-      }, 1000); // Keep delay for initial status check after load
-    }
-    
-    // Execute initialization immediately for pomodoro features
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => initializePomodoroFeatures().catch(console.error));
-    } else {
-      initializePomodoroFeatures().catch(console.error);
-    }
-    
     // Also call getSettings immediately to initialize scroll blocking features
     getSettings();
-    
-    // Update the pomodoro display
-    function updatePomodoroDisplay(minutes: number, seconds: number, duration: number, isBreak?: boolean) {
-      pomodoroRemainingMinutes = minutes;
-      pomodoroRemainingSeconds = seconds;
-      pomodoroDuration = duration;
-      
-      // Format time as MM:SS/MM:00
-      const timeDisplay = document.getElementById('pomodoro-time');
-      if (timeDisplay) {
-        const formattedMinutes = String(minutes).padStart(2, '0');
-        const formattedSeconds = String(seconds).padStart(2, '0');
-        const formattedTotal = String(duration).padStart(2, '0');
-        timeDisplay.textContent = `${formattedMinutes}:${formattedSeconds}/${formattedTotal}:00`;
-        
-        // Update styling based on break status
-        if (pomodoroOverlay) {
-          if (isBreak) {
-            pomodoroOverlay.style.backgroundColor = 'rgba(33, 150, 243, 0.85)';
-            const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-            if (iconElement) iconElement.textContent = '☕';
-          } else {
-            pomodoroOverlay.style.backgroundColor = 'rgba(76, 175, 80, 0.85)';
-            const iconElement = pomodoroOverlay.querySelector('.pomodoro-icon');
-            if (iconElement) iconElement.textContent = '🍅';
-          }
-        }
-      } else {
-        // If the element doesn't exist yet, we might need to recreate the overlay
-        createPomodoroOverlay();
-      }
-    }
     
     // Get settings from storage
     async function getSettings() {
@@ -1277,7 +825,9 @@ export default defineContentScript({
           autoPlayOnReveal: false,
           buttonText: 'View Video',
           buttonColor: '#1DA1F2'
-        }
+        },
+        isLockInMode: false, // Lock In mode state
+        lockInActivatedTime: 0 // When Lock In was activated
       });
       
       maxScrolls = result.maxScrolls;
@@ -1288,6 +838,8 @@ export default defineContentScript({
       instagramSettings = result.instagramSettings;
       adBlockerCompatMode = result.adBlockerCompatMode;
       videoOverlaySettings = result.videoOverlaySettings;
+      isLockInMode = result.isLockInMode;
+      lockInActivatedTime = result.lockInActivatedTime;
       
       // Only proceed with scroll blocking features if current site is in the distracting sites list
       if (!isDistractingSite()) {
@@ -1304,8 +856,15 @@ export default defineContentScript({
       // Add elements to DOM now that we know this is a distracting site
       document.body.appendChild(overlay);
       document.body.appendChild(pendingOverlay);
+      document.body.appendChild(lockInOverlay);
       document.body.appendChild(counter);
       counter.style.display = 'block';
+      
+      // Check Lock In mode state and apply if active
+      if (isLockInMode) {
+        console.log(`Lock In mode is active for ${currentHost}`);
+        setLockInBlocking(true);
+      }
       
       // Initialize AI Content Analysis
       await initializeAIAnalysis();
@@ -2396,12 +1955,16 @@ export default defineContentScript({
 
     // Check if current site is in the distracting sites list
     function isDistractingSite() {
-      return distractingSites.some(site => currentHost.includes(site));
+      return distractingSites.some(site => 
+        currentHost === site || currentHost.endsWith('.' + site)
+      );
     }
     
     // Find the specific domain from the distracting sites list that matches current host
     function getMatchingDomain() {
-      return distractingSites.find(site => currentHost.includes(site)) || currentHost;
+      return distractingSites.find(site => 
+        currentHost === site || currentHost.endsWith('.' + site)
+      ) || currentHost;
     }
     
     // Get effective scroll limit for current domain
@@ -2456,6 +2019,58 @@ export default defineContentScript({
       // since we now manage the timer independently of blocking status
     }
     
+    // Block/unblock access for Lock In mode
+    function setLockInBlocking(block: boolean) {
+      if (block) {
+        // Save current scroll position
+        document.body.setAttribute('data-lockin-scroll-position', window.scrollY.toString());
+        
+        // Add event listeners to prevent all interaction
+        window.addEventListener('wheel', preventLockInInteraction, { passive: false });
+        window.addEventListener('touchmove', preventLockInInteraction, { passive: false });
+        window.addEventListener('keydown', preventLockInInteraction, { passive: false });
+        window.addEventListener('click', preventLockInInteraction, { passive: false });
+        
+        // Fix body
+        const scrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+        
+        // Show Lock In overlay
+        lockInOverlay.style.display = 'flex';
+        
+        console.log('Lock In blocking activated');
+      } else {
+        // Remove event listeners
+        window.removeEventListener('wheel', preventLockInInteraction);
+        window.removeEventListener('touchmove', preventLockInInteraction);
+        window.removeEventListener('keydown', preventLockInInteraction);
+        window.removeEventListener('click', preventLockInInteraction);
+        
+        // Restore body
+        const scrollY = parseInt(document.body.getAttribute('data-lockin-scroll-position') || '0', 10);
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+        
+        // Hide Lock In overlay
+        lockInOverlay.style.display = 'none';
+        
+        console.log('Lock In blocking deactivated');
+      }
+    }
+    
+    // Event handler for blocking all interactions in Lock In mode
+    function preventLockInInteraction(e: Event) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+    
     // Event handlers for blocking scroll
     function preventWheelScroll(e: Event) {
       if (isBlocked) {
@@ -2479,7 +2094,6 @@ export default defineContentScript({
       console.log('CLEANUP: Page unloading, cleaning up resources');
       
       stopTimerUpdates();
-      stopLocalPomodoroUpdate();
       
       // Clean up AI analysis state
       if (isAnalysisInProgress) {
@@ -2575,58 +2189,6 @@ export default defineContentScript({
       }).catch(err => {
         console.error('Error syncing scroll count:', err);
       });
-    }
-    
-    // Start local pomodoro countdown
-    function startLocalPomodoroUpdate() {
-      // Clear any existing interval first
-      if (pomodoroUpdateInterval) {
-        clearInterval(pomodoroUpdateInterval);
-        pomodoroUpdateInterval = null;
-      }
-      
-      // Only start if pomodoro is active and we have a valid end time
-      if (!isPomodoroActive || pomodoroEndTime <= 0) return;
-      
-      // Set up an interval to update every second
-      pomodoroUpdateInterval = setInterval(() => {
-        const now = Date.now();
-        const remainingTime = Math.max(0, pomodoroEndTime - now);
-        
-        if (remainingTime <= 0) {
-          // Timer has finished, stop the interval
-          clearInterval(pomodoroUpdateInterval!);
-          pomodoroUpdateInterval = null;
-          
-          // We'll let the POMODORO_COMPLETE message handle the cleanup
-          return;
-        }
-        
-        // Calculate minutes and seconds
-        const minutes = Math.floor(remainingTime / (60 * 1000));
-        const seconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
-        
-        // Check with background script to determine if this is a break timer
-        browser.runtime.sendMessage({ type: 'GET_POMODORO_STATUS' })
-          .then(status => {
-            if (status && status.isActive) {
-              // Update the display with correct break status
-              updatePomodoroDisplay(minutes, seconds, pomodoroDuration, status.isBreak);
-            }
-          })
-          .catch(() => {
-            // Fallback if there's an error getting the status
-            updatePomodoroDisplay(minutes, seconds, pomodoroDuration, false);
-          });
-      }, 1000);
-    }
-    
-    // Stop local pomodoro countdown
-    function stopLocalPomodoroUpdate() {
-      if (pomodoroUpdateInterval) {
-        clearInterval(pomodoroUpdateInterval);
-        pomodoroUpdateInterval = null;
-      }
     }
   },
 });

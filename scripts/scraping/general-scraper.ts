@@ -63,7 +63,7 @@ export class GeneralScraper {
   private isOnMonitoredSite(): boolean {
     const currentDomain = this.getCurrentDomain();
     return this.config.distractingSites.some(site => 
-      currentDomain.includes(site) || site.includes(currentDomain)
+      currentDomain === site || currentDomain.endsWith('.' + site)
     );
   }
 
